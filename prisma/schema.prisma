@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int      @id @default(autoincrement())
+  name     String
+  email    String   @unique
+  password String
+  role     String   @default("user") 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
+}
+
+model Task {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+}
+
+model Ticket {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  status      String   @default("open")
+  identifierId Int
+  module      String
+  assignedTo  Int?     // ID del usuario asignado (no relación Prisma)
+  userId      Int      // ID del usuario que creó el ticket
+  createdAt   DateTime @default(now())
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int      // ID del ticket al que pertenece el mensaje
+  senderId  Int      // ID del usuario que envía el mensaje
+  message   String?
+  fileUrl   String?
+  createdAt DateTime @default(now())
+
+  @@map("tickets_chat")
+}
+
+model Identifier {
+  id                Int     @id @default(autoincrement())
+  name              String  @unique
+  description       String?
+  dataType          String
+  minLength         Int?
+  maxLength         Int?
+  allowLettersOnly  Boolean @default(false)
+  allowAlphaNumeric Boolean @default(true)
+  regex             String?
+  createdAt         DateTime @default(now())
+}
+
+model TicketFile {
+  id         Int      @id @default(autoincrement())
+  ticketId   Int
+  historyId  Int?
+  filename   String
+  path       String
+  mime       String
+  size       Int
+  uploadedBy Int
+  createdAt  DateTime @default(now())
+
+  @@map("tickets_files")
+}
+
+model TicketHistory {
+  id         Int      @id @default(autoincrement())
+  ticketId   Int
+  action     String
+  userId     Int
+  note       String?
+  createdAt  DateTime @default(now())
+  @@map("tickets_history")
+}

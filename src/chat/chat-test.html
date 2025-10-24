@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prueba Chat Gateway</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+  <h1>💬 Prueba de WebSocket (Chat Gateway)</h1>
+
+  <label>Ticket ID: <input id="ticketId" value="1"></label><br>
+  <label>User ID: <input id="userId" value="123"></label><br>
+  <button onclick="joinRoom()">Unirse a Ticket</button>
+
+  <hr>
+
+  <textarea id="message" placeholder="Escribe un mensaje"></textarea><br>
+  <button onclick="sendMessage()">Enviar mensaje</button>
+
+  <pre id="log"></pre>
+
+  <script>
+    const socket = io("http://localhost:3000", {
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => log(`✅ Conectado: ${socket.id}`));
+    socket.on("disconnect", () => log("❌ Conexión cerrada"));
+
+    socket.on("previousMessages", (messages) => {
+      log("📜 Mensajes anteriores:");
+      messages.forEach((m) => log(`🕓 ${m.senderId}: ${m.message || "(archivo)"} `));
+    });
+
+    socket.on("newMessage", (msg) => {
+      log(`💬 Nuevo mensaje de ${msg.senderId}: ${msg.message || "(archivo)"}`);
+    });
+
+    function joinRoom() {
+      const ticketId = parseInt(document.getElementById("ticketId").value);
+      const userId = parseInt(document.getElementById("userId").value);
+      socket.emit("joinRoom", { ticketId, userId });
+      log(`🟢 Unido a ticket_${ticketId}`);
+    }
+
+    function sendMessage() {
+      const ticketId = parseInt(document.getElementById("ticketId").value);
+      const senderId = parseInt(document.getElementById("userId").value);
+      const message = document.getElementById("message").value;
+      socket.emit("sendMessage", { ticketId, senderId, message });
+      document.getElementById("message").value = "";
+    }
+
+    function log(msg) {
+      document.getElementById("log").textContent += msg + "\n";
+    }
+  </script>
+</body>
+</html>
