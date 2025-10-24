@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Socket Test - Tasksphere</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; }
+    .col { display:flex; gap:12px; }
+    input[type="text"], textarea { width: 100%; padding:8px; }
+    button { padding:8px 12px; }
+    #log { background:#111; color:#eee; padding:12px; height:200px; overflow:auto; font-family: monospace }
+    #messages { border:1px solid #ddd; padding:12px; height:200px; overflow:auto; }
+    label { font-weight:600 }
+  </style>
+</head>
+<body>
+  <h1>Prueba WebSocket (socket.io) - Tasksphere</h1>
+  <p>Usa este pequeño tester para conectarte al namespace <code>/ws/tickets</code>, unirte a una sala y enviar mensajes. Antes de conectar obtén un JWT con <code>/auth/login</code> (Swagger) y pégalo en el campo <strong>JWT</strong>.</p>
+
+  <div>
+    <label>JWT (token completo):</label>
+    <input id="token" type="text" placeholder="pega aquí el JWT (sin 'Bearer ' si lo vas a pasar en auth.token)" />
+  </div>
+
+  <div style="margin-top:8px;">
+    <button id="connectBtn">Conectar</button>
+    <button id="disconnectBtn" disabled>Desconectar</button>
+  </div>
+
+  <h3>Unirse a ticket</h3>
+  <div class="col">
+    <div style="flex:1">
+      <label>Ticket ID</label>
+      <input id="ticketId" type="text" value="123" />
+    </div>
+    <div style="width:200px; align-self:end">
+      <button id="joinBtn" disabled>Unirse</button>
+    </div>
+  </div>
+
+  <h3>Enviar mensaje</h3>
+  <div>
+    <label>Mensaje</label>
+    <textarea id="message" rows="3">Hola desde socket-test.html</textarea>
+  </div>
+  <div>
+    <label>File URL (opcional)</label>
+    <input id="fileUrl" type="text" placeholder="/uploads/chat/archivo.png" />
+  </div>
+  <div style="margin-top:8px;">
+    <button id="sendBtn" disabled>Enviar mensaje</button>
+  </div>
+
+  <h3>Mensajes recibidos</h3>
+  <div id="messages"></div>
+
+  <h3>Log</h3>
+  <div id="log"></div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const tokenInput = document.getElementById('token');
+    const ticketIdInput = document.getElementById('ticketId');
+    const messageInput = document.getElementById('message');
+    const fileUrlInput = document.getElementById('fileUrl');
+    const logEl = document.getElementById('log');
+    const messagesEl = document.getElementById('messages');
+
+    let socket = null;
+
+    function log(...args) {
+      const line = document.createElement('div');
+      line.textContent = new Date().toISOString() + ' - ' + args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function addMessage(msg) {
+      const el = document.createElement('div');
+      el.style.borderBottom = '1px solid #eee';
+      el.style.padding = '6px 0';
+      el.textContent = JSON.stringify(msg);
+      messagesEl.appendChild(el);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    connectBtn.addEventListener('click', () => {
+      const token = tokenInput.value.trim();
+      if (!token) { alert('Pega un JWT en el campo Token primero'); return; }
+      // Preferir auth token (no incluir 'Bearer ' cuando se pasa en auth.token)
+      try {
+        socket = io('http://localhost:3000/ws/tickets', { auth: { token } });
+      } catch (err) {
+        log('Error init socket', err);
+        return;
+      }
+
+      socket.on('connect', () => {
+        log('connected, id=' + socket.id);
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        joinBtn.disabled = false;
+        sendBtn.disabled = false;
+      });
+
+      socket.on('connect_error', (err) => {
+        log('connect_error', err && err.message ? err.message : err);
+      });
+
+      socket.on('message', (data) => {
+        log('received message event', data);
+        addMessage(data);
+      });
+
+      socket.on('disconnect', (reason) => {
+        log('disconnected: ' + reason);
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        joinBtn.disabled = true;
+        sendBtn.disabled = true;
+      });
+
+      log('attempting connection...');
+    });
+
+    disconnectBtn.addEventListener('click', () => {
+      if (socket) {
+        socket.disconnect();
+        socket = null;
+      }
+    });
+
+    joinBtn.addEventListener('click', () => {
+      if (!socket) { alert('Conéctate primero'); return; }
+      const ticketId = Number(ticketIdInput.value);
+      if (!ticketId) { alert('TicketId inválido'); return; }
+      socket.emit('join_ticket', { ticketId }, (resp) => {
+        log('join_ticket callback', resp);
+      });
+    });
+
+    sendBtn.addEventListener('click', () => {
+      if (!socket) { alert('Conéctate primero'); return; }
+      const ticketId = Number(ticketIdInput.value);
+      if (!ticketId) { alert('TicketId inválido'); return; }
+      const payload = { ticketId, message: messageInput.value, fileUrl: fileUrlInput.value || null };
+      socket.emit('message', payload, (resp) => {
+        log('message callback', resp);
+        if (resp && resp.message) addMessage(resp.message);
+      });
+    });
+
+  </script>
+</body>
+</html>

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 import { TicketsController } from './tickets.controller';
 import { ChatGateway } from './chat.gateway';
+import { ChatDocsController } from './chat.docs.controller';
 import { JwtModule } from '@nestjs/jwt';
 
 @Module({
@@ -10,7 +11,7 @@ import { JwtModule } from '@nestjs/jwt';
       secret: 'mi_secreto_super_seguro', // mirror auth module secret; consider using env var
     }),
   ],
-  controllers: [TicketsController],
+  controllers: [TicketsController, ChatDocsController],
   providers: [TicketsService, ChatGateway],
   exports: [TicketsService],
 })

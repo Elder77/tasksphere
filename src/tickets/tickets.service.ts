@@ -188,6 +188,12 @@ export class TicketsService {
 
   // Persist chat messages coming from the gateway
   async persistChatMessage(ticketId: number, senderId: number, message?: string, fileUrl?: string) {
+    // Ensure ticket exists to provide clearer errors to the gateway
+    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      // Throw a standard NotFoundException so callers can handle it
+      throw new NotFoundException('Ticket no encontrado');
+    }
     return this.prisma.chatMessage.create({ data: { ticketId, senderId, message: message ?? '', fileUrl: fileUrl ?? null } });
   }
 }
