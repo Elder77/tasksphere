@@ -94,7 +94,9 @@
       if (!token) { alert('Pega un JWT en el campo Token primero'); return; }
       // Preferir auth token (no incluir 'Bearer ' cuando se pasa en auth.token)
       try {
-        socket = io('http://localhost:3000/ws/tickets', { auth: { token } });
+        // Use the page origin so clients that open this HTML via IP connect back to the same host
+        const origin = `${location.protocol}//${location.hostname}${location.port ? ':' + location.port : ''}`;
+        socket = io(`${origin}/ws/tickets`, { auth: { token } });
       } catch (err) {
         log('Error init socket', err);
         return;

@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-import { join } from 'path';
+import { join,resolve } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 
@@ -12,9 +12,9 @@ async function bootstrap() {
   // Filtro global de errores
   app.useGlobalFilters(new AllExceptionsFilter());
     // 🔹 Servir archivos estáticos desde la carpeta /uploads
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads/',
-  });
+app.useStaticAssets(resolve(process.cwd(), 'uploads'), {
+  prefix: '/uploads/',
+});
 
   // Swagger (opcional): intenta cargar @nestjs/swagger si está instalado
   try {
@@ -38,6 +38,12 @@ async function bootstrap() {
     // eslint-disable-next-line no-console
     console.error('[main] Swagger setup failed:', e && e.message ? e.message : e);
   }
-  await app.listen(process.env.PORT ?? 3000);
+  const port = Number(process.env.PORT) || 3000;
+  const host = process.env.HOST || '0.0.0.0';
+  await app.listen(port, host);
+  // Log the effective URL to help testing from LAN
+  const displayHost = host === '0.0.0.0' ? '0.0.0.0 (all interfaces)' : host;
+  // eslint-disable-next-line no-console
+  console.log(`[main] Listening on http://${displayHost}:${port}`);
 }
 bootstrap();

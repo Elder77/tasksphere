@@ -53,7 +53,15 @@ export class ChatGateway implements OnGatewayInit {
       const allowed = user?.role === 'user' || ticket.userId === user?.id || ticket.assignedTo === user?.id;
       if (!allowed) return { status: 'forbidden', reason: 'not_allowed' };
       client.join(room);
-      return { status: 'joined', ticketId: payload.ticketId };
+      // fetch chat history and include it in the join response
+      try {
+        const messages = await this.ticketsService.getChatMessages(payload.ticketId);
+        return { status: 'joined', ticketId: payload.ticketId, messages };
+      } catch (err) {
+        // if messages can't be loaded, still allow join but inform client
+        this.logger.warn('Could not load chat history for ticket ' + payload.ticketId + ': ' + (err as any).message);
+        return { status: 'joined', ticketId: payload.ticketId, messages: [] };
+      }
     } catch (err) {
       this.logger.error('join_ticket error', err as any);
       // If the service threw a NotFoundException, include that reason; otherwise include generic message

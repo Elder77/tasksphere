@@ -196,4 +196,14 @@ export class TicketsService {
     }
     return this.prisma.chatMessage.create({ data: { ticketId, senderId, message: message ?? '', fileUrl: fileUrl ?? null } });
   }
+
+  /**
+   * Devuelve el historial de mensajes de un ticket ordenado por fecha ascendente.
+   */
+  async getChatMessages(ticketId: number) {
+    // Ensure ticket exists
+    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    return this.prisma.chatMessage.findMany({ where: { ticketId }, orderBy: { createdAt: 'asc' } });
+  }
 }
