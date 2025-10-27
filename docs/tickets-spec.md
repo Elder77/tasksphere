@@ -77,13 +77,13 @@ Tickets
   - Muestra ticket completo con historial y archivos.
 
 - POST /tickets
-  - Cuerpo JSON: { identifierId, title, description, moduleId }
+  - Cuerpo JSON: { tiid_id, tiid_nombre, description, moduleId }
   - Archivos: multipart/form-data (max 3 archivos, 5MB cada uno)
   - Validaciones: todos obligatorios excepto archivos.
 
 - PUT /tickets/:id
   - Edita sólo: description, moduleId, añadir archivos.
-  - No permite cambiar identifierId.
+  - No permite cambiar tiid_id.
 
 - POST /tickets/:id/assign
   - Body: { assignedToId }
@@ -114,8 +114,8 @@ Archivos
 Chat (WebSocket)
 - Namespace/route: /ws/tickets
 - Eventos:
-  - join_ticket { ticketId }
-  - message { ticketId, message, optional file }
+  - join_ticket { tick_id }
+  - message { tick_id, message, optional file }
   - message_saved (acknowledge)
 - Permisos: solo creador y superadmin asignado pueden unirse al canal de un ticket.
 
@@ -123,7 +123,7 @@ Chat (WebSocket)
 
 ## Validaciones y límites
 
-- Campos obligatorios: identifier, title, description, module.
+- Campos obligatorios: identifier, tiid_nombre, description, module.
 - Archivos: máximo 3 por acción (crear/editar/close/reopen), 5MB por archivo.
 - Validar tipo MIME en backend (lista blanca basada en requerimiento: images/pdf/zip/text).
 - Validar cantidad y tamaño también en frontend (Defensa en profundidad).
@@ -149,7 +149,7 @@ Metadatos en DB: original filename, path/url, mime, size, usuario que subió, re
 ## Historial
 
 Cada cambio importante genera una entrada en `ticket_history` con:
-- ticketId, acción (CREATED, ASSIGNED, EDITED, CLOSED, REOPENED), usuario, observación, archivos.
+- tick_id, acción (CREATED, ASSIGNED, EDITED, CLOSED, REOPENED), usuario, observación, archivos.
 
 El endpoint GET /tickets/:id devuelve timeline ordenado por fecha.
 
@@ -184,14 +184,14 @@ El endpoint GET /tickets/:id devuelve timeline ordenado por fecha.
 ## Contrato mínimo de APIs (ejemplos)
 
 POST /tickets (multipart/form-data)
-- fields: identifierId (number), title (string), description (string), moduleId (number)
+- fields: tiid_id (number), tiid_nombre (string), description (string), moduleId (number)
 - files: attachments[]
 
 Response 201
 {
   "id": 123,
-  "identifierId": 1,
-  "title": "Falló sensor",
+  "tiid_id": 1,
+  "tiid_nombre": "Falló sensor",
   "status": "OPEN",
   "createdAt": "..."
 }

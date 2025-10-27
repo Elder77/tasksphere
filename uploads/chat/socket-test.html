@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Socket Test - Tasksphere</title>
+  <tiid_nombre>Socket Test - Tasksphere</tiid_nombre>
   <style>
     body { font-family: system-ui, sans-serif; padding: 20px; }
     .col { display:flex; gap:12px; }
@@ -32,7 +32,7 @@
   <div class="col">
     <div style="flex:1">
       <label>Ticket ID</label>
-      <input id="ticketId" type="text" value="123" />
+      <input id="tick_id" type="text" value="123" />
     </div>
     <div style="width:200px; align-self:end">
       <button id="joinBtn" disabled>Unirse</button>
@@ -65,7 +65,7 @@
     const joinBtn = document.getElementById('joinBtn');
     const sendBtn = document.getElementById('sendBtn');
     const tokenInput = document.getElementById('token');
-    const ticketIdInput = document.getElementById('ticketId');
+    const tick_idInput = document.getElementById('tick_id');
     const messageInput = document.getElementById('message');
     const fileUrlInput = document.getElementById('fileUrl');
     const logEl = document.getElementById('log');
@@ -139,18 +139,18 @@
 
     joinBtn.addEventListener('click', () => {
       if (!socket) { alert('Conéctate primero'); return; }
-      const ticketId = Number(ticketIdInput.value);
-      if (!ticketId) { alert('TicketId inválido'); return; }
-      socket.emit('join_ticket', { ticketId }, (resp) => {
+      const tick_id = Number(tick_idInput.value);
+      if (!tick_id) { alert('tick_id inválido'); return; }
+      socket.emit('join_ticket', { tick_id }, (resp) => {
         log('join_ticket callback', resp);
       });
     });
 
     sendBtn.addEventListener('click', () => {
       if (!socket) { alert('Conéctate primero'); return; }
-      const ticketId = Number(ticketIdInput.value);
-      if (!ticketId) { alert('TicketId inválido'); return; }
-      const payload = { ticketId, message: messageInput.value, fileUrl: fileUrlInput.value || null };
+      const tick_id = Number(tick_idInput.value);
+      if (!tick_id) { alert('tick_id inválido'); return; }
+      const payload = { tick_id, message: messageInput.value, fileUrl: fileUrlInput.value || null };
       socket.emit('message', payload, (resp) => {
         log('message callback', resp);
         if (resp && resp.message) addMessage(resp.message);

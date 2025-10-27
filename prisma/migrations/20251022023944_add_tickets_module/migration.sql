@@ -2,12 +2,12 @@
   Warnings:
 
   - You are about to drop the `ChatMessage` table. If the table is not empty, all the data it contains will be lost.
-  - Added the required column `identifierId` to the `Ticket` table without a default value. This is not possible if the table is not empty.
+  - Added the required column `tiid_id` to the `Ticket` table without a default value. This is not possible if the table is not empty.
   - Added the required column `module` to the `Ticket` table without a default value. This is not possible if the table is not empty.
 
 */
 -- AlterTable
-ALTER TABLE "Ticket" ADD COLUMN     "identifierId" INTEGER NOT NULL,
+ALTER TABLE "Ticket" ADD COLUMN     "tiid_id" INTEGER NOT NULL,
 ADD COLUMN     "module" TEXT NOT NULL;
 
 -- DropTable
@@ -16,7 +16,7 @@ DROP TABLE "public"."ChatMessage";
 -- CreateTable
 CREATE TABLE "tickets_chat" (
     "id" SERIAL NOT NULL,
-    "ticketId" INTEGER NOT NULL,
+    "tick_id" INTEGER NOT NULL,
     "senderId" INTEGER NOT NULL,
     "message" TEXT,
     "fileUrl" TEXT,
@@ -44,7 +44,7 @@ CREATE TABLE "Identifier" (
 -- CreateTable
 CREATE TABLE "tickets_files" (
     "id" SERIAL NOT NULL,
-    "ticketId" INTEGER NOT NULL,
+    "tick_id" INTEGER NOT NULL,
     "historyId" INTEGER,
     "filename" TEXT NOT NULL,
     "path" TEXT NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE "tickets_files" (
 -- CreateTable
 CREATE TABLE "tickets_history" (
     "id" SERIAL NOT NULL,
-    "ticketId" INTEGER NOT NULL,
+    "tick_id" INTEGER NOT NULL,
     "action" TEXT NOT NULL,
     "userId" INTEGER NOT NULL,
     "note" TEXT,

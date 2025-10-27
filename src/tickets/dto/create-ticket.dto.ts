@@ -8,20 +8,25 @@ export class CreateTicketDto {
   // convertimos automáticamente a number antes de la validación
   @Type(() => Number)
   @IsInt()
-  identifierId: number;
+  tiid_id: number;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  title: string;
+  tick_nombre: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  description: string;
+  tick_descripcion: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  module: string;
+  tick_modulo: string;
+
+  @ApiProperty({ description: 'Cédula del usuario creador (si no se proporciona se tomará del token)' })
+  @IsString()
+  @IsNotEmpty()
+  usua_cedula?: string;
 }

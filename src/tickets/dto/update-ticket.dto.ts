@@ -5,10 +5,15 @@ export class UpdateTicketDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  description?: string;
+  tick_descripcion?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  module?: string;
+  tick_modulo?: string;
+
+  @ApiProperty({ required: false, description: 'Cédula del usuario que realiza la edición (opcional). Si se omite, se toma del token.' })
+  @IsOptional()
+  @IsString()
+  usua_cedula?: string;
 }

@@ -1,92 +1,100 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id       Int      @id @default(autoincrement())
-  name     String
-  email    String   @unique
-  password String
-  role     String   @default("user") 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model proyectos {
+  proy_id       Int       @id @default(autoincrement())
+  proy_nombre   String?   @db.VarChar(100)
+  proy_token    String?   @db.VarChar(200)
+  fecha_sistema DateTime? @db.Timestamp(0)
 }
 
-model Task {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
+model ticked_file {
+  tifi_id       Int       @id @default(autoincrement())
+  tick_id       Int
+  hist_id       Int?
+  tifi_filename String?   @db.VarChar(255)
+  tifi_url      String?   @db.VarChar(255)
+  tifi_mime     String?   @db.VarChar(50)
+  tifi_size     Int?
+  fecha_sistema DateTime? @db.Timestamp(0)
 }
 
-model Ticket {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String
-  status      String   @default("open")
-  identifierId Int
-  module      String
-  assignedTo  Int?     // ID del usuario asignado (no relación Prisma)
-  userId      Int      // ID del usuario que creó el ticket
-  createdAt   DateTime @default(now())
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket {
+  tick_id               Int       @id @default(autoincrement())
+  tick_id_identificador Int
+  tick_nombre           String?   @db.VarChar(200)
+  tick_descripcion      String?   @db.Text
+  tick_estado           String?   @default("A") @db.Char(1)
+  tick_modulo           String?   @db.VarChar(50)
+  tick_usuario_asignado String?   @db.VarChar(15)
+  usua_cedula           String?   @db.VarChar(15)
+  proy_id               Int
+  fecha_sistema         DateTime? @db.Timestamp(0)
 }
 
-model ChatMessage {
-  id        Int      @id @default(autoincrement())
-  ticketId  Int      // ID del ticket al que pertenece el mensaje
-  senderId  Int      // ID del usuario que envía el mensaje
-  message   String?
-  fileUrl   String?
-  createdAt DateTime @default(now())
-
-  @@map("tickets_chat")
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_chat {
+  tich_id       Int       @id @default(autoincrement())
+  tick_id       Int
+  usua_cedula   String?   @db.VarChar(15)
+  tich_mensaje  String?   @db.Text
+  tich_file_url String?   @db.VarChar(255)
+  fecha_sistema DateTime? @db.Timestamp(0)
 }
 
-model Identifier {
-  id                Int     @id @default(autoincrement())
-  name              String  @unique
-  description       String?
-  dataType          String
-  minLength         Int?
-  maxLength         Int?
-  allowLettersOnly  Boolean @default(false)
-  allowAlphaNumeric Boolean @default(true)
-  regex             String?
-  createdAt         DateTime @default(now())
+model ticket_historial {
+  tihi_id       Int       @id @default(autoincrement())
+  tick_id       Int
+  tihi_accion   String?   @db.VarChar(50)
+  usua_cedula   String?   @db.VarChar(15)
+  fecha_sistema DateTime? @db.Timestamp(0)
 }
 
-model TicketFile {
-  id         Int      @id @default(autoincrement())
-  ticketId   Int
-  historyId  Int?
-  filename   String
-  path       String
-  mime       String
-  size       Int
-  uploadedBy Int
-  createdAt  DateTime @default(now())
-
-  @@map("tickets_files")
+model ticket_identificador {
+  tiid_id            Int       @id @default(autoincrement())
+  tiid_nombre        String?   @db.VarChar(255)
+  tiid_descripcion   String?   @db.VarChar(255)
+  tiid_tipo_dato     String?   @db.VarChar(50)
+  tiid_min_lenght    Int?
+  tiid_max_lenght    Int?
+  tiid_solo_letres   Boolean?  @default(false)
+  tiid_alpha_numeric Boolean?  @default(true)
+  tiid_regex         String?   @db.VarChar(255)
+  fecha_sistema      DateTime? @db.Timestamp(0)
 }
 
-model TicketHistory {
-  id         Int      @id @default(autoincrement())
-  ticketId   Int
-  action     String
-  userId     Int
-  note       String?
-  createdAt  DateTime @default(now())
-  @@map("tickets_history")
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_usuarios {
+  usua_cedula            String    @id @db.VarChar(11)
+  proy_id                Int?      @default(1) @db.UnsignedInt
+  usua_password          String    @db.VarChar(60)
+  usua_nombres           String    @db.VarChar(30)
+  usua_apellidos         String    @db.VarChar(30)
+  usua_email             String    @db.VarChar(120)
+  usua_celular           String    @db.VarChar(10)
+  usua_fecha_nacimiento  DateTime? @db.Date
+  usua_activo            String    @db.Char(2)
+  usua_sesion_token      String?   @db.VarChar(60)
+  usua_origen            String?   @db.VarChar(10)
+  usua_cambio_password   DateTime  @db.Date
+  perf_id                Int       @db.UnsignedInt
+  ortr_id                String?   @db.VarChar(8)
+  dipo_id                String?   @db.VarChar(8)
+  usua_direccion         String?   @db.VarChar(120)
+  usua_ip_ultimo_ingreso String?   @db.VarChar(20)
+  usua_fecha_ingreso     DateTime? @db.DateTime(0)
+  usua_fecha_sistema     DateTime  @db.DateTime(0)
+  usua_cedula_login      String?   @db.VarChar(11)
+  usua_password_temp     String?   @db.VarChar(150)
+  usua_fecha_recupe      DateTime? @db.DateTime(0)
+
+  @@index([perf_id], map: "perf_id")
 }

@@ -9,11 +9,15 @@ async function main() {
   ];
 
   for (const id of identifiers) {
-    await prisma.identifier.upsert({
-      where: { name: id.name },
-      update: {},
-      create: id,
-    });
+    const exists = await prisma.ticket_identificador.findFirst({ where: { tiid_nombre: id.name } });
+    if (!exists) {
+      await prisma.ticket_identificador.create({ data: {
+        tiid_nombre: id.name,
+        tiid_descripcion: id.description,
+        tiid_tipo_dato: id.dataType,
+        fecha_sistema: new Date(),
+      }});
+    }
   }
 
   console.log('Seed completed');

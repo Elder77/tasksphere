@@ -8,8 +8,9 @@
 <body>
   <h1>💬 Prueba de WebSocket (Chat Gateway)</h1>
 
-  <label>Ticket ID: <input id="ticketId" value="1"></label><br>
-  <label>User ID: <input id="userId" value="123"></label><br>
+  <label>Ticket ID: <input id="tick_id" value="1"></label><br>
+  <label>usua_cedula: <input id="usua_cedula" value="01020304050"></label><br>
+  <label>Token (opcional): <input id="token" value=""></label><br>
   <button onclick="joinRoom()">Unirse a Ticket</button>
 
   <hr>
@@ -20,34 +21,40 @@
   <pre id="log"></pre>
 
   <script>
-    const socket = io("http://localhost:3000", {
-      transports: ["websocket"],
-    });
+    let socket = null;
 
-    socket.on("connect", () => log(`✅ Conectado: ${socket.id}`));
-    socket.on("disconnect", () => log("❌ Conexión cerrada"));
+    function connectWithToken(token) {
+      socket = io("http://localhost:3000/ws/tickets", {
+        transports: ["websocket"],
+        auth: { token: token ? `Bearer ${token}` : undefined },
+      });
 
-    socket.on("previousMessages", (messages) => {
-      log("📜 Mensajes anteriores:");
-      messages.forEach((m) => log(`🕓 ${m.senderId}: ${m.message || "(archivo)"} `));
-    });
+  socket.on("connect", () => log(`✅ Conectado: ${socket.id}`));
+      socket.on("disconnect", () => log("❌ Conexión cerrada"));
 
-    socket.on("newMessage", (msg) => {
-      log(`💬 Nuevo mensaje de ${msg.senderId}: ${msg.message || "(archivo)"}`);
-    });
+      socket.on("message", (msg) => {
+        log(`📩 Mensaje: ${JSON.stringify(msg)}`);
+      });
+    }
+
+    // Note: connectWithToken will set up events
 
     function joinRoom() {
-      const ticketId = parseInt(document.getElementById("ticketId").value);
-      const userId = parseInt(document.getElementById("userId").value);
-      socket.emit("joinRoom", { ticketId, userId });
-      log(`🟢 Unido a ticket_${ticketId}`);
+      const tick_id = parseInt(document.getElementById("tick_id").value);
+      const token = document.getElementById("token").value;
+      if (!socket) connectWithToken(token);
+      socket.emit("join_ticket", { tick_id }, (res) => {
+        log(`🟢 Join response: ${JSON.stringify(res)}`);
+      });
     }
 
     function sendMessage() {
-      const ticketId = parseInt(document.getElementById("ticketId").value);
-      const senderId = parseInt(document.getElementById("userId").value);
+      const tick_id = parseInt(document.getElementById("tick_id").value);
       const message = document.getElementById("message").value;
-      socket.emit("sendMessage", { ticketId, senderId, message });
+      if (!socket) return log('🔴 No conectado. Primero pulsa "Unirse a Ticket" y proporciona token si aplica.');
+      socket.emit("message", { tick_id, message }, (res) => {
+        log(`📨 send response: ${JSON.stringify(res)}`);
+      });
       document.getElementById("message").value = "";
     }
 

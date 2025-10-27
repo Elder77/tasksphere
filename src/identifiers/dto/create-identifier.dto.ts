@@ -5,25 +5,25 @@ export class CreateIdentifierDto {
   @ApiProperty({ description: 'Nombre único del identificador' })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  tiid_nombre: string;
 
   @ApiProperty({ description: 'Descripción del identificador', required: false })
   @IsOptional()
   @IsString()
-  description?: string;
+  tiid_descripcion?: string;
 
   @ApiProperty({ description: 'Tipo de dato esperado (string, number, etc.)' })
   @IsString()
   @IsNotEmpty()
-  dataType: string;
+  tiid_tipo_dato: string;
 
   @ApiProperty({ description: 'Longitud mínima', required: false })
   @IsOptional()
   @IsInt()
-  minLength?: number;
+  tiid_min_lenght?: number;
 
   @ApiProperty({ description: 'Longitud máxima', required: false })
   @IsOptional()
   @IsInt()
-  maxLength?: number;
+  tiid_max_lenght?: number;
 }

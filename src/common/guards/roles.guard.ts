@@ -11,7 +11,16 @@ export class RolesGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest();
 
-    if (!requiredRoles.includes(user.role)) {
+    // Map simple role names to perf_id values: 'user' -> 1, 'admin' -> 2
+    const allowed = requiredRoles.some((r) => {
+      const num = Number(r);
+      if (!isNaN(num)) return user?.perf_id === num;
+      if (r === 'admin' && user?.perf_id === 2) return true;
+      if (r === 'user' && user?.perf_id === 1) return true;
+      return false;
+    });
+
+    if (!allowed) {
       throw new ForbiddenException('No tienes permisos para acceder a esta ruta');
     }
 

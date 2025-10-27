@@ -5,25 +5,25 @@ export class UpdateIdentifierDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  name?: string;
+  tiid_nombre?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  description?: string;
+  tiid_descripcion?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  dataType?: string;
+  tiid_tipo_dato?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
-  minLength?: number;
+  tiid_min_lenght?: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
-  maxLength?: number;
+  tiid_max_lenght?: number;
 }
