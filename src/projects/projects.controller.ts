@@ -46,7 +46,10 @@ export class TicketProyectosController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get(':id')
-  findOne(@Request() req: ExRequest & { user?: { project_token?: boolean } }, @Param('id') id: string) {
+  findOne(
+    @Request() req: ExRequest & { user?: { project_token?: boolean } },
+    @Param('id') id: string,
+  ) {
     if (req.user && req.user.project_token) {
       throw new UnauthorizedException('No autorizado con token de proyecto');
     }
@@ -56,7 +59,10 @@ export class TicketProyectosController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get(':id/users')
-  async getUsers(@Request() req: ExRequest & { user?: { project_token?: boolean } }, @Param('id') id: string) {
+  async getUsers(
+    @Request() req: ExRequest & { user?: { project_token?: boolean } },
+    @Param('id') id: string,
+  ) {
     if (req.user && req.user.project_token) {
       throw new UnauthorizedException('No autorizado con token de proyecto');
     }
@@ -81,7 +87,10 @@ export class TicketProyectosController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Post()
-  create(@Request() req: ExRequest & { user?: { project_token?: boolean } }, @Body() body: CreateProyectoDto) {
+  create(
+    @Request() req: ExRequest & { user?: { project_token?: boolean } },
+    @Body() body: CreateProyectoDto,
+  ) {
     // Disallow creating projects when the token used is a project token (project_token===true)
     if (req.user && req.user.project_token) {
       throw new UnauthorizedException(
@@ -108,7 +117,10 @@ export class TicketProyectosController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Delete(':id')
-  remove(@Request() req: ExRequest & { user?: { project_token?: boolean } }, @Param('id') id: string) {
+  remove(
+    @Request() req: ExRequest & { user?: { project_token?: boolean } },
+    @Param('id') id: string,
+  ) {
     if (req.user && req.user.project_token) {
       throw new UnauthorizedException('No autorizado con token de proyecto');
     }

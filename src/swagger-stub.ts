@@ -1,12 +1,14 @@
 // Minimal stub for @nestjs/swagger decorators so project compiles without the package.
 // If you install @nestjs/swagger and swagger-ui-express, replace imports to the real package.
-export const ApiTags = (t: string) => (target: any) => {};
+export const ApiTags = (_t: string) => (_target: any) => {};
 export const ApiOperation =
-  (o: any) => (target: any, key?: any, desc?: any) => {};
-export const ApiQuery = (o: any) => (target: any, key?: any, desc?: any) => {};
+  (_o: any) => (_target: any, _key?: any, _desc?: any) => {};
+export const ApiQuery =
+  (_o: any) => (_target: any, _key?: any, _desc?: any) => {};
 export const ApiConsumes =
-  (o: any) => (target: any, key?: any, desc?: any) => {};
-export const ApiBody = (o: any) => (target: any, key?: any, desc?: any) => {};
+  (_o: any) => (_target: any, _key?: any, _desc?: any) => {};
+export const ApiBody =
+  (_o: any) => (_target: any, _key?: any, _desc?: any) => {};
 export const ApiResponse =
-  (o: any) => (target: any, key?: any, desc?: any) => {};
-export const ApiProperty = (o?: any) => (target: any, key?: any) => {};
+  (_o: any) => (_target: any, _key?: any, _desc?: any) => {};
+export const ApiProperty = (_o?: any) => (_target: any, _key?: any) => {};

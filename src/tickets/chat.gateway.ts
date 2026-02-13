@@ -29,6 +29,14 @@ export class ChatGateway implements OnGatewayInit {
   private readonly logger = new Logger(ChatGateway.name);
   private server: Server;
   private jwtSecret: string;
+  private isAuthUser(x: unknown): x is AuthUser {
+    if (typeof x !== 'object' || x === null) return false;
+    const r = x as Record<string, unknown>;
+    return (
+      typeof r['usua_cedula'] !== 'undefined' ||
+      typeof r['tipr_id'] !== 'undefined'
+    );
+  }
   private isRecord(x: unknown): x is Record<string, unknown> {
     return typeof x === 'object' && x !== null;
   }
@@ -47,8 +55,8 @@ export class ChatGateway implements OnGatewayInit {
     server.use((socket: Socket, next: (err?: Error) => void) => {
       (async () => {
         try {
-          const authPart = socket.handshake.auth;
-          const queryPart = socket.handshake.query;
+          const authPart: unknown = socket.handshake.auth;
+          const queryPart: unknown = socket.handshake.query;
           let token: string | undefined;
 
           if (authPart && typeof authPart === 'object' && 'token' in authPart) {
@@ -116,6 +124,17 @@ export class ChatGateway implements OnGatewayInit {
     });
   }
 
+  private extractErrorMessage(err: unknown): string | undefined {
+    if (!err || typeof err !== 'object') return undefined;
+    const e = err as Record<string, unknown>;
+    if (typeof e['message'] === 'string') return e['message'];
+    if (typeof e['response'] === 'object' && e['response'] !== null) {
+      const r = e['response'] as Record<string, unknown>;
+      if (typeof r['message'] === 'string') return r['message'];
+    }
+    return undefined;
+  }
+
   @SubscribeMessage('join_ticket')
   async handleJoin(
     @MessageBody()
@@ -131,7 +150,8 @@ export class ChatGateway implements OnGatewayInit {
     const room = `ticket_${tickId}`;
     try {
       const ticket = await this.ticketsService.findOne(tickId);
-      const user = client.data?.user;
+      const userObj: unknown = (client.data as unknown)?.user;
+      const user = this.isAuthUser(userObj) ? userObj : undefined;
       if (!ticket) return { status: 'error', message: 'Ticket no existe' };
       // El chat sólo está permitido cuando el ticket ha sido asignado
       if (!ticket.tick_usuario_asignado)
@@ -152,17 +172,13 @@ export class ChatGateway implements OnGatewayInit {
           'No se pudo cargar el historial de chat para el ticket ' +
             String(payload.tick_id) +
             ': ' +
-            String((err as Error)?.message ?? String(err)),
+            String(this.extractErrorMessage(err) ?? String(err)),
         );
         return { status: 'joined', tick_id: payload.tick_id, messages: [] };
       }
     } catch (err) {
       this.logger.error('join_ticket error', err);
-      // Si el servicio lanzó NotFoundException, incluir esa razón; si no, usar mensaje genérico
-      const reason =
-        err && (err.message || (err.response && err.response.message))
-          ? err.message || err.response.message
-          : 'internal_error';
+      const reason = this.extractErrorMessage(err) ?? 'internal_error';
       return { status: 'error', reason };
     }
   }
@@ -185,7 +201,8 @@ export class ChatGateway implements OnGatewayInit {
     if (!tickId || isNaN(tickId))
       return { status: 'error', message: 'tick_id inválido' };
     const room = `ticket_${tickId}`;
-    const user = client.data?.user;
+    const userObj: unknown = (client.data as unknown)?.user;
+    const user = this.isAuthUser(userObj) ? userObj : undefined;
     try {
       const saved = await this.ticketsService.persistChatMessage(
         tickId,
@@ -198,22 +215,32 @@ export class ChatGateway implements OnGatewayInit {
       const out: Record<string, unknown> = {};
       if (this.isRecord(savedObj)) {
         const r = savedObj;
-        out.tich_id = r.tich_id ?? r.id;
-        out.tick_id = r.tick_id;
-        out.usua_cedula = r.usua_cedula;
-        out.tich_mensaje = r.tich_mensaje ?? r.message;
-        out.tich_file_url = r.tich_file_url ?? r.fileUrl;
-        out.fecha_sistema = r.fecha_sistema ?? r.createdAt;
+        out.tich_id =
+          typeof r['tich_id'] !== 'undefined' ? r['tich_id'] : r['id'];
+        out.tick_id = r['tick_id'];
+        out.usua_cedula = r['usua_cedula'];
+        out.tich_mensaje =
+          typeof r['tich_mensaje'] === 'string'
+            ? r['tich_mensaje']
+            : r['message'];
+        out.tich_file_url =
+          typeof r['tich_file_url'] === 'string'
+            ? r['tich_file_url']
+            : r['fileUrl'];
+        out.fecha_sistema = r['fecha_sistema'] ?? r['createdAt'];
       }
 
-      client.to(room).emit('message', out);
+      client.to(room).emit('message', out as unknown as object);
 
       // determinar presencia en la sala y crear notificaciones para usuarios que no estén conectados al chat
       try {
         const members =
-          (this.server?.sockets?.adapter?.rooms?.get(room) as
-            | Set<unknown>
-            | undefined) || new Set<unknown>();
+          ((
+            this.server?.sockets as unknown as {
+              adapter?: Record<string, unknown>;
+            }
+          )?.adapter?.rooms?.get(room) as Set<unknown> | undefined) ||
+          new Set<unknown>();
 
         const isUserInRoom = (cedula: string) => {
           try {

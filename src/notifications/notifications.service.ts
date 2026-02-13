@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsGateway } from './notifications.gateway';
 
@@ -16,7 +16,7 @@ export class NotificationsService {
     usua_cedula?: string;
     tick_usuario_asignado?: string;
   }) {
-    const createData: any = {
+    const createData: Record<string, unknown> = {
       tino_tipo: data.tino_tipo,
       tino_mensaje: data.tino_mensaje,
       tino_estado: 'E',
@@ -29,26 +29,35 @@ export class NotificationsService {
     if (data.tick_usuario_asignado)
       createData.tick_usuario_asignado = String(data.tick_usuario_asignado);
 
-    const rec = await this.prisma.ticket_notificaciones.create({
-      data: createData,
-    });
+    const rec = (await this.prisma.ticket_notificaciones.create({
+      data: createData as any,
+    })) as Record<string, unknown>;
 
     // emit real-time notification to connected sockets if gateway available
     try {
       if (this.gateway) {
-        if (rec.usua_cedula)
-          await this.gateway.emitToUser(String(rec.usua_cedula), {
-            type: rec.tino_tipo,
-            message: rec.tino_mensaje,
-            tick_id: rec.tick_id,
-            id: rec.tino_id,
+        const r = rec;
+        const tipo =
+          typeof r.tino_tipo === 'string'
+            ? r.tino_tipo
+            : String(r.tino_tipo ?? '');
+        const mensaje =
+          typeof r.tino_mensaje === 'string'
+            ? r.tino_mensaje
+            : String(r.tino_mensaje ?? '');
+        if (typeof r.usua_cedula === 'string')
+          this.gateway.emitToUser(String(r.usua_cedula), {
+            type: String(tipo),
+            message: String(mensaje),
+            tick_id: r.tick_id,
+            id: r.tino_id,
           });
-        if (rec.tick_usuario_asignado)
-          await this.gateway.emitToUser(String(rec.tick_usuario_asignado), {
-            type: rec.tino_tipo,
-            message: rec.tino_mensaje,
-            tick_id: rec.tick_id,
-            id: rec.tino_id,
+        if (typeof r.tick_usuario_asignado === 'string')
+          this.gateway.emitToUser(String(r.tick_usuario_asignado), {
+            type: String(tipo),
+            message: String(mensaje),
+            tick_id: r.tick_id,
+            id: r.tino_id,
           });
       }
     } catch (e) {
@@ -69,9 +78,9 @@ export class NotificationsService {
       ],
     };
     const [total, data] = await Promise.all([
-      this.prisma.ticket_notificaciones.count({ where }),
+      this.prisma.ticket_notificaciones.count({ where: where as any }),
       this.prisma.ticket_notificaciones.findMany({
-        where,
+        where: where as any,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { fecha_sistema: 'desc' },
@@ -95,7 +104,9 @@ export class NotificationsService {
         },
       ],
     };
-    const cnt = await this.prisma.ticket_notificaciones.count({ where });
+    const cnt = await this.prisma.ticket_notificaciones.count({
+      where: where as any,
+    });
     return cnt;
   }
 

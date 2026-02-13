@@ -35,12 +35,12 @@ export class IdentifiersService {
   }
 
   async findAll(q?: string) {
-    const where: any = {};
-    if (q && String(q).trim()) {
-      where.tiid_nombre = { contains: String(q).trim(), mode: 'insensitive' };
-    }
+    const where: Record<string, unknown> =
+      q && String(q).trim()
+        ? { tiid_nombre: { contains: String(q).trim(), mode: 'insensitive' } }
+        : {};
     return this.prisma.ticket_identificador.findMany({
-      where,
+      where: where as any,
       orderBy: { fecha_sistema: 'desc' },
     });
   }
@@ -48,13 +48,14 @@ export class IdentifiersService {
   async findAllPaged(page = 1, perPage = 10, q?: string) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
-    const where: any = {};
-    if (q && String(q).trim())
-      where.tiid_nombre = { contains: String(q).trim(), mode: 'insensitive' };
+    const where: Record<string, unknown> =
+      q && String(q).trim()
+        ? { tiid_nombre: { contains: String(q).trim(), mode: 'insensitive' } }
+        : {};
     const [total, data] = await Promise.all([
-      this.prisma.ticket_identificador.count({ where }),
+      this.prisma.ticket_identificador.count({ where: where as any }),
       this.prisma.ticket_identificador.findMany({
-        where,
+        where: where as any,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { fecha_sistema: 'desc' },
@@ -72,10 +73,10 @@ export class IdentifiersService {
     });
   }
 
-  async update(tiid_id: number, dto: any) {
+  async update(tiid_id: number, dto: Partial<CreateIdentifierDto>) {
     return this.prisma.ticket_identificador.update({
       where: { tiid_id: tiid_id },
-      data: dto,
+      data: dto as any,
     });
   }
 

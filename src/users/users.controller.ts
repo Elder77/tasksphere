@@ -73,6 +73,6 @@ export class UsersController {
     if (authUser?.perf_id !== 2 && authUser?.usua_cedula !== usua_cedula) {
       throw new ForbiddenException('No autorizado');
     }
-    return this.usersService.update(usua_cedula, dto as UpdateUserDto);
+    return this.usersService.update(usua_cedula, dto);
   }
 }

@@ -33,42 +33,43 @@ export class TicketsService {
     private notificationsService?: NotificationsService,
   ) {}
 
-  private validateIdentifierValue(identifier: any, value: any) {
+  private validateIdentifierValue(identifier: unknown, value: unknown) {
     if (value === null || value === undefined) return; // nada que validar aquí
     const v = String(value);
-    const tipo = (identifier?.tiid_tipo_dato || 'string').toLowerCase();
+    const idObj = (identifier as Record<string, unknown>) || {};
+    const tipo = (
+      typeof idObj.tiid_tipo_dato === 'string' ? idObj.tiid_tipo_dato : 'string'
+    ).toLowerCase();
 
     // validaciones de longitud (si están provistas)
-    const minL = identifier?.tiid_min_lenght;
-    const maxL = identifier?.tiid_max_lenght;
-    // tratar null/undefined/0 como "no establecido"
+    const minL = idObj.tiid_min_lenght;
+    const maxL = idObj.tiid_max_lenght;
     if (minL != null && Number(minL) > 0 && v.length < Number(minL))
-      throw new BadRequestException(`Valor muy corto (min ${minL})`);
+      throw new BadRequestException(`Valor muy corto (min ${String(minL)})`);
     if (maxL != null && Number(maxL) > 0 && v.length > Number(maxL))
-      throw new BadRequestException(`Valor muy largo (max ${maxL})`);
+      throw new BadRequestException(`Valor muy largo (max ${String(maxL)})`);
 
     // type-specific checks
     if (tipo === 'string') {
-      if (identifier?.tiid_solo_letras) {
+      if (idObj.tiid_solo_letras) {
         if (!/^[A-Za-z\s]+$/.test(v))
           throw new BadRequestException(
             'Solo se permiten letras en este identificador',
           );
-      } else if (identifier?.tiid_alpha_numeric) {
+      } else if (idObj.tiid_alpha_numeric) {
         if (!/^[A-Za-z0-9\s]+$/.test(v))
           throw new BadRequestException(
             'Sólo se permiten letras y números en este identificador',
           );
       }
-      if (identifier?.tiid_regex) {
+      if (idObj.tiid_regex && typeof idObj.tiid_regex === 'string') {
         try {
-          const re = new RegExp(identifier.tiid_regex);
+          const re = new RegExp(idObj.tiid_regex);
           if (!re.test(v))
             throw new BadRequestException(
               'Valor no cumple la expresión regular del identificador',
             );
-        } catch (e) {
-          // regex inválida en la BD -> ignorar o lanzar según la política
+        } catch {
           throw new BadRequestException(
             'Expresión regular del identificador inválida',
           );
@@ -116,7 +117,7 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
     if (!files || !files.length) return [];
     const saved = this.saveFilesToDisk(id, files, authUser?.usua_cedula ?? '0');
-    const created: Array<Record<string, any>> = [];
+    const created: Array<Record<string, unknown>> = [];
     for (const s of saved) {
       const rec = await this.prisma.ticked_file.create({
         data: {
@@ -141,17 +142,30 @@ export class TicketsService {
     return created;
   }
 
-  async findAll(query: any, authUser?: AuthUser) {
+  async findAll(query: Record<string, unknown>, authUser?: AuthUser) {
     // paginación
-    const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const perPage =
-      Number(query.perPage) > 0 ? Math.min(Number(query.perPage), 100) : 10;
+    const page = (() => {
+      const p = query?.page;
+      if (typeof p === 'string' || typeof p === 'number') {
+        const n = Number(p);
+        return n > 0 ? n : 1;
+      }
+      return 1;
+    })();
+    const perPage = (() => {
+      const pp = query?.perPage;
+      if (typeof pp === 'string' || typeof pp === 'number') {
+        const n = Number(pp);
+        return n > 0 ? Math.min(n, 100) : 10;
+      }
+      return 10;
+    })();
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     // mapear parámetros de consulta a nombres de columnas en la BD
-    if (query.status) where.tick_estado = query.status;
-    if (query.module) where.tick_modulo = query.module;
-    if (query.search) {
+    if (typeof query.status === 'string') where.tick_estado = query.status;
+    if (typeof query.module === 'string') where.tick_modulo = query.module;
+    if (typeof query.search === 'string') {
       where.OR = [
         {
           tick_nombre: { contains: String(query.search), mode: 'insensitive' },
@@ -265,7 +279,8 @@ export class TicketsService {
     files: Express.Multer.File[],
     authUser?: AuthUser,
   ) {
-    const tiid_id = Number((createDto as any).tiid_id);
+    const tiid_raw = (createDto as unknown as Record<string, unknown>)?.tiid_id;
+    const tiid_id = Number(tiid_raw);
     if (isNaN(tiid_id)) throw new BadRequestException('tiid_id inválido');
 
     const identifier = await this.prisma.ticket_identificador.findUnique({
@@ -408,7 +423,9 @@ export class TicketsService {
         'El usuario asignado debe ser un administrador (perf_id=2)',
       );
 
-    const updateData: any = { tick_usuario_asignado: String(assignedToId) };
+    const updateData: Record<string, unknown> = {
+      tick_usuario_asignado: String(assignedToId),
+    };
     if (tica_id != null) updateData.tica_id = Number(tica_id);
     if (prio_id != null) updateData.prio_id = Number(prio_id);
     const ticket = await this.prisma.ticket.update({
@@ -466,7 +483,12 @@ export class TicketsService {
       data: { tick_estado: 'C' },
     });
 
-    let savedFiles: any[] = [];
+    let savedFiles: Array<{
+      filename: string;
+      path: string;
+      mime: string;
+      size: number;
+    }> = [];
     if (files && files.length) {
       savedFiles = this.saveFilesToDisk(
         id,
@@ -521,7 +543,12 @@ export class TicketsService {
       data: { tick_estado: 'P' },
     });
 
-    let savedFiles: any[] = [];
+    let savedFiles: Array<{
+      filename: string;
+      path: string;
+      mime: string;
+      size: number;
+    }> = [];
     if (files && files.length) {
       savedFiles = this.saveFilesToDisk(
         id,

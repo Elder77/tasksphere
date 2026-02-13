@@ -8,7 +8,7 @@ export class TicketPrioridadesService {
   constructor(private prisma: PrismaService) {}
 
   findAll(q?: string) {
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (q && String(q).trim()) {
       where.prio_nombre = { contains: String(q).trim(), mode: 'insensitive' };
     }
@@ -21,13 +21,13 @@ export class TicketPrioridadesService {
   async findAllPaged(page = 1, perPage = 10, q?: string) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (q && String(q).trim())
       where.prio_nombre = { contains: String(q).trim(), mode: 'insensitive' };
     const [total, data] = await Promise.all([
-      this.prisma.ticket_prioridades.count({ where }),
+      this.prisma.ticket_prioridades.count({ where: where as any }),
       this.prisma.ticket_prioridades.findMany({
-        where,
+        where: where as any,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { fecha_sistema: 'desc' },

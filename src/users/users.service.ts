@@ -18,11 +18,11 @@ export class UsersService {
   async findAllPaged(page = 1, perPage = 10) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
-    const where = {} as any;
+    const where: Record<string, unknown> = {};
     const [total, data] = await Promise.all([
-      this.prisma.ticket_usuarios.count({ where }),
+      this.prisma.ticket_usuarios.count({ where: where as any }),
       this.prisma.ticket_usuarios.findMany({
-        where,
+        where: where as any,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { usua_fecha_sistema: 'desc' },
@@ -34,22 +34,24 @@ export class UsersService {
     };
   }
 
-  async findFiltered(query: any) {
-    const where: any = {};
-    if (query?.perf_id !== undefined) {
-      where.perf_id = Number(query.perf_id);
-    }
-    // aceptar usua_estado o usua_activo desde el cliente
-    if (query?.usua_estado !== undefined) {
-      where.usua_activo = String(query.usua_estado);
-    } else if (query?.usua_activo !== undefined) {
-      where.usua_activo = String(query.usua_activo);
-    }
-    if (query?.usua_cedula) {
-      where.usua_cedula = String(query.usua_cedula);
+  async findFiltered(query: unknown) {
+    const where: Record<string, unknown> = {};
+    if (query && typeof query === 'object') {
+      const q = query as Record<string, unknown>;
+      if (typeof q.perf_id === 'string' || typeof q.perf_id === 'number')
+        where.perf_id = Number(q.perf_id);
+      if (typeof q.usua_estado === 'string')
+        where.usua_activo = String(q.usua_estado);
+      else if (typeof q.usua_activo === 'string')
+        where.usua_activo = String(q.usua_activo);
+      if (
+        typeof q.usua_cedula === 'string' ||
+        typeof q.usua_cedula === 'number'
+      )
+        where.usua_cedula = String(q.usua_cedula);
     }
     return this.prisma.ticket_usuarios.findMany({
-      where,
+      where: where as any,
       orderBy: { usua_fecha_sistema: 'desc' },
     });
   }
@@ -68,7 +70,7 @@ export class UsersService {
     const hashed = await bcrypt.hash(password, 10);
 
     // Construir el payload que corresponde al esquema de Prisma (strings para celular, apellidos, etc.)
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       usua_cedula: data.usua_cedula,
       usua_nombres: data.usua_nombres,
       usua_apellidos: data.usua_apellidos ?? '',
@@ -87,57 +89,60 @@ export class UsersService {
     };
 
     try {
-      const created = await this.prisma.ticket_usuarios.create({
-        data: payload,
-      });
+      const created = (await this.prisma.ticket_usuarios.create({
+        data: payload as any,
+      })) as Record<string, unknown>;
       return created;
-    } catch (e: any) {
-      // Convertir errores de Prisma/internos a BadRequestException legible cuando sea posible
-      // Manejar errores de constraint único (P2002) y mapearlos a campo->mensajes para que el frontend muestre inline
+    } catch (errUnknown) {
       try {
-        if (e && e.code === 'P2002') {
-          // e.meta.target puede ser el nombre de la columna o un arreglo de columnas
-          const target = e?.meta?.target;
-          let field: string | null = null;
-          if (Array.isArray(target) && target.length) field = String(target[0]);
-          else if (typeof target === 'string') field = target;
-          // normalizar tokens de campo a claves conocidas
-          const keyNorm = field
-            ? String(field)
-                .toLowerCase()
-                .replace(/[^a-z0-9]/g, '')
-            : null;
-          const map: Record<string, string> = {
-            usua_cedula: 'usua_cedula',
-            cedula: 'usua_cedula',
-            usua_email: 'usua_email',
-            email: 'usua_email',
-          };
-          const mapped = keyNorm ? map[keyNorm] || field : field;
-          const obj: any = {};
-          if (mapped) {
-            // user-friendly Spanish message
-            const msg =
-              mapped === 'usua_email'
-                ? 'El email ya existe'
-                : 'La cédula ya existe';
-            obj[mapped] = [msg];
-            throw new BadRequestException(obj);
+        const err = errUnknown as unknown;
+        if (err && typeof err === 'object') {
+          const eObj = err as Record<string, unknown>;
+          if (typeof eObj['code'] === 'string' && eObj['code'] === 'P2002') {
+            const meta = eObj['meta'] as Record<string, unknown> | undefined;
+            const target = meta?.['target'];
+            let field: string | null = null;
+            if (Array.isArray(target) && target.length)
+              field = String(target[0]);
+            else if (typeof target === 'string') field = target;
+            const keyNorm = field
+              ? String(field)
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]/g, '')
+              : null;
+            const map: Record<string, string> = {
+              usua_cedula: 'usua_cedula',
+              cedula: 'usua_cedula',
+              usua_email: 'usua_email',
+              email: 'usua_cedula',
+            };
+            const mapped = keyNorm ? map[keyNorm] || field : field;
+            if (mapped) {
+              const obj: Record<string, unknown> = {};
+              const msg =
+                mapped === 'usua_email'
+                  ? 'El email ya existe'
+                  : 'La cédula ya existe';
+              obj[mapped] = [msg];
+              throw new BadRequestException(obj);
+            }
           }
         }
       } catch (inner) {
-        // si lanzamos BadRequestException arriba, relanzarlo
         if (inner instanceof BadRequestException) throw inner;
       }
 
-      const msg = e && e.message ? String(e.message) : 'Error al crear usuario';
+      const msg =
+        errUnknown && errUnknown.message
+          ? String(errUnknown.message)
+          : 'Error al crear usuario';
       throw new BadRequestException(msg);
     }
   }
 
   async update(usua_cedula: string, dto: Partial<CreateUserDto>) {
     // permitir actualizar campos básicos del usuario; la contraseña debe hashearse si se provee
-    const data: any = {};
+    const data: Record<string, unknown> = {};
     if (dto.usua_nombres !== undefined) data.usua_nombres = dto.usua_nombres;
     if (dto.usua_apellidos !== undefined)
       data.usua_apellidos = dto.usua_apellidos;
@@ -154,7 +159,7 @@ export class UsersService {
 
     const updated = await this.prisma.ticket_usuarios.update({
       where: { usua_cedula },
-      data,
+      data: data as any,
     });
     return updated;
   }

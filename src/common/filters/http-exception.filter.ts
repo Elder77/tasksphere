@@ -56,7 +56,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
 
     // Convert various response shapes into a normalized message object
-    let message: any = rawResponse;
+    let message: unknown = rawResponse;
 
     // If the response is an array of ValidationError (class-validator), convert to field->messages
     if (
@@ -66,25 +66,33 @@ export class AllExceptionsFilter implements ExceptionFilter {
     ) {
       const obj: Record<string, string[]> = {};
       for (const it of rawResponse) {
-        const prop = it.property || it.propertyName;
-        const constraints = it.constraints || null;
-        if (prop && constraints) {
-          obj[prop] = Object.values(constraints).map((v: any) =>
+        const itObj = it as Record<string, unknown>;
+        const prop =
+          typeof itObj.property === 'string'
+            ? itObj.property
+            : typeof itObj.propertyName === 'string'
+              ? itObj.propertyName
+              : undefined;
+        const constraints = itObj.constraints as
+          | Record<string, unknown>
+          | undefined;
+        if (prop && constraints && typeof constraints === 'object') {
+          obj[prop] = Object.values(constraints).map((v) =>
             translate(String(v)),
           );
         }
       }
       message = obj;
     } else if (rawResponse && typeof rawResponse === 'object') {
-      // If rawResponse.message is an array of strings like ["field must be..."]
-      const rr: any = rawResponse as any;
+      const rr = rawResponse as Record<string, unknown>;
+      const maybeMessage = rr.message;
+
       if (
-        Array.isArray(rr.message) &&
-        rr.message.every((x: any) => typeof x === 'string')
+        Array.isArray(maybeMessage) &&
+        maybeMessage.every((x) => typeof x === 'string')
       ) {
-        // Build field->messages by parsing each string "field ..."
         const obj: Record<string, string[]> = {};
-        for (const m of rr.message as string[]) {
+        for (const m of maybeMessage) {
           const match = String(m).match(/^([a-zA-Z0-9_]+)\s+(.*)$/);
           if (match) {
             const key = match[1];
@@ -92,34 +100,29 @@ export class AllExceptionsFilter implements ExceptionFilter {
             obj[key] = obj[key] || [];
             obj[key].push(translate(rest));
           } else {
-            // fallback: translate whole message and put under 'message'
             obj['message'] = obj['message'] || [];
             obj['message'].push(translate(String(m)));
           }
         }
         message = obj;
       } else if (
-        rr.message &&
-        typeof rr.message === 'object' &&
-        !Array.isArray(rr.message)
+        maybeMessage &&
+        typeof maybeMessage === 'object' &&
+        !Array.isArray(maybeMessage)
       ) {
-        // message is already an object field->messages; translate inner strings
         const obj: Record<string, string[]> = {};
-        for (const k of Object.keys(rr.message)) {
-          const v = rr.message[k];
-          if (Array.isArray(v))
-            obj[k] = v.map((x: any) => translate(String(x)));
+        for (const k of Object.keys(maybeMessage as Record<string, unknown>)) {
+          const v = (maybeMessage as Record<string, unknown>)[k];
+          if (Array.isArray(v)) obj[k] = v.map((x) => translate(String(x)));
           else obj[k] = [translate(String(v))];
         }
         message = obj;
       } else if (
         typeof rr === 'object' &&
         rr['error'] &&
-        rr['message'] &&
-        Array.isArray(rr.message)
+        Array.isArray(maybeMessage)
       ) {
-        // already handled above, but keep as fallback
-        message = rr.message.map((m: any) => translate(String(m)));
+        message = (maybeMessage as unknown[]).map((m) => translate(String(m)));
       }
     } else if (typeof rawResponse === 'string') {
       message = translate(rawResponse);

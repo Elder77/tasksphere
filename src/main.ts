@@ -47,4 +47,4 @@ async function bootstrap() {
 
   console.log(`[main] Listening on http://${displayHost}:${port}`);
 }
-bootstrap();
+void bootstrap();

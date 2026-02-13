@@ -26,6 +26,16 @@ import {
 export class NotificationsController {
   constructor(private service: NotificationsService) {}
 
+  private extractUsua(req: unknown): string {
+    const userObj: unknown = (req as { user?: unknown })?.user;
+    if (typeof userObj !== 'object' || userObj === null) return '';
+    const user = userObj as Record<string, unknown>;
+    const val = user['usua_cedula'];
+    if (typeof val === 'string') return val;
+    if (typeof val === 'number') return String(val);
+    return '';
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get()
   @ApiOperation({
@@ -34,15 +44,12 @@ export class NotificationsController {
   })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'perPage', required: false })
-  async findAll(@Req() req: any, @Query() query: any) {
-    const user = req.user;
-    const page = query?.page ?? 1;
-    const perPage = query?.perPage ?? 10;
-    return this.service.findForUserPaged(
-      String(user?.usua_cedula ?? ''),
-      page,
-      perPage,
-    );
+  async findAll(@Req() req: unknown, @Query() query: unknown) {
+    const usua = this.extractUsua(req);
+    const q = (query as Record<string, unknown> | undefined) ?? {};
+    const page = Number(q.page ?? 1) || 1;
+    const perPage = Number(q.perPage ?? 10) || 10;
+    return this.service.findForUserPaged(String(usua), page, perPage);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -52,9 +59,9 @@ export class NotificationsController {
     description:
       'Devuelve la cantidad de notificaciones no leídas del usuario autenticado',
   })
-  async unreadCount(@Req() req: any) {
-    const user = req.user;
-    const cnt = await this.service.countUnread(String(user?.usua_cedula ?? ''));
+  async unreadCount(@Req() req: unknown) {
+    const usua = this.extractUsua(req);
+    const cnt = await this.service.countUnread(String(usua));
     return { unread: cnt };
   }
 
@@ -66,12 +73,9 @@ export class NotificationsController {
       'Marca la notificación indicada como leída para el usuario autenticado',
   })
   @ApiResponse({ status: 200, description: 'Notificación marcada' })
-  async markRead(@Req() req: any, @Param('id') id: string) {
-    const user = req.user;
-    const res = await this.service.markAsRead(
-      Number(id),
-      String(user?.usua_cedula ?? ''),
-    );
+  async markRead(@Req() req: unknown, @Param('id') id: string) {
+    const usua = this.extractUsua(req);
+    const res = await this.service.markAsRead(Number(id), String(usua));
     return { updated: res.count };
   }
 
@@ -83,9 +87,9 @@ export class NotificationsController {
       'Marca todas las notificaciones no leídas del usuario autenticado como leídas',
   })
   @ApiBody({ schema: { type: 'object', properties: {} } })
-  async markAllRead(@Req() req: any) {
-    const user = req.user;
-    const res = await this.service.markAllRead(String(user?.usua_cedula ?? ''));
+  async markAllRead(@Req() req: unknown) {
+    const usua = this.extractUsua(req);
+    const res = await this.service.markAllRead(String(usua));
     return { updated: res.count };
   }
 }

@@ -29,7 +29,18 @@ export class NotificationsGateway
   private isUserObject(
     x: unknown,
   ): x is { usua_cedula?: string; sub?: string } {
-    return typeof x === 'object' && x !== null;
+    if (typeof x !== 'object' || x === null) return false;
+    const r = x as Record<string, unknown>;
+    return (
+      typeof r['usua_cedula'] !== 'undefined' || typeof r['sub'] !== 'undefined'
+    );
+  }
+
+  private extractErrorMessage(err: unknown): string | undefined {
+    if (!err || typeof err !== 'object') return undefined;
+    const e = err as Record<string, unknown>;
+    if (typeof e['message'] === 'string') return e['message'];
+    return undefined;
   }
 
   afterInit(server: Server) {
@@ -123,13 +134,18 @@ export class NotificationsGateway
 
   handleConnection(client: Socket) {
     try {
-      const userObj = client.data?.user;
       const userObj: unknown = (client.data as unknown)?.user;
       let u: string | undefined;
       if (this.isUserObject(userObj)) {
+        const r = userObj as Record<string, unknown>;
+        const ced = r['usua_cedula'];
+        const sub = r['sub'];
         u =
-          userObj.usua_cedula ??
-          (userObj as { usua_cedula?: string; sub?: string }).sub;
+          typeof ced === 'string'
+            ? ced
+            : typeof sub === 'string'
+              ? sub
+              : undefined;
       }
       this.logger.debug(
         `[NotificationsGateway] client connected ${client.id} user=${u}`,
@@ -150,7 +166,7 @@ export class NotificationsGateway
       this.logger.debug(
         `[NotificationsGateway] client disconnected ${client.id}`,
       );
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -206,9 +222,15 @@ export class NotificationsGateway
         try {
           const uObj: unknown = (s as Socket & { data?: unknown }).data?.user;
           if (this.isUserObject(uObj)) {
+            const ru = uObj as Record<string, unknown>;
+            const ced = ru['usua_cedula'];
+            const sub = ru['sub'];
             const sockUser =
-              uObj.usua_cedula ??
-              (uObj as { usua_cedula?: string; sub?: string }).sub;
+              typeof ced === 'string'
+                ? ced
+                : typeof sub === 'string'
+                  ? sub
+                  : undefined;
             if (sockUser && String(sockUser) === String(usua_cedula)) {
               s.emit('notification', payload);
               matched++;

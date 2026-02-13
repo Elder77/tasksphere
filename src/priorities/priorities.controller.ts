@@ -23,11 +23,24 @@ export class TicketPrioridadesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get()
-  findAll(@Query() query: any) {
-    const hasPage = query?.page !== undefined || query?.perPage !== undefined;
-    const page = Number(query?.page ?? 1);
-    const perPage = Number(query?.perPage ?? 10);
-    const q = query?.q ?? query?.search ?? undefined;
+  findAll(@Query() query: unknown) {
+    const qObj = (query as Record<string, unknown>) ?? {};
+    const hasPage =
+      typeof qObj.page !== 'undefined' || typeof qObj.perPage !== 'undefined';
+    const page =
+      typeof qObj.page === 'string' || typeof qObj.page === 'number'
+        ? Number(qObj.page)
+        : 1;
+    const perPage =
+      typeof qObj.perPage === 'string' || typeof qObj.perPage === 'number'
+        ? Math.min(Number(qObj.perPage), 100)
+        : 10;
+    const q =
+      typeof qObj.q === 'string'
+        ? qObj.q
+        : typeof qObj.search === 'string'
+          ? qObj.search
+          : undefined;
     if (hasPage) return this.service.findAllPaged(page, perPage, q);
     return this.service.findAll(q);
   }

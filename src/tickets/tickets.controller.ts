@@ -23,7 +23,7 @@ import { ReopenTicketDto } from './dto/reopen-ticket.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { Response } from 'express';
-import { extname } from 'path';
+// path.extname no se usa aquí
 import {
   ApiTags,
   ApiOperation,
@@ -42,6 +42,27 @@ import type { AuthUser } from '../types/auth';
 @ApiBearerAuth('access-token')
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
+
+  private extractAuthUser(req: unknown): AuthUser | undefined {
+    const userObj = (req as { user?: unknown })?.user;
+    if (!userObj || typeof userObj !== 'object') return undefined;
+    const u = userObj as Record<string, unknown>;
+    const ced = u['usua_cedula'];
+    const perf = u['perf_id'];
+    const tipr = u['tipr_id'];
+    return {
+      usua_cedula:
+        typeof ced === 'string'
+          ? ced
+          : typeof ced === 'number'
+            ? String(ced)
+            : undefined,
+      perf_id: typeof perf === 'number' ? perf : undefined,
+      tipr_id: typeof tipr === 'number' ? tipr : undefined,
+      usua_email:
+        typeof u['usua_email'] === 'string' ? u['usua_email'] : undefined,
+    } as AuthUser;
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get()
@@ -79,9 +100,9 @@ export class TicketsController {
     status: 401,
     description: 'No autorizado. Token inválido o no provisto.',
   })
-  findAll(@Req() req: Request & { user?: any }, @Query() query: any) {
-    const user: any = req.user;
-    return this.ticketsService.findAll(query, user);
+  findAll(@Req() req: unknown, @Query() query: unknown) {
+    const user = this.extractAuthUser(req);
+    return this.ticketsService.findAll(query as Record<string, unknown>, user);
   }
 
   @Get(':id')
@@ -93,7 +114,7 @@ export class TicketsController {
   @ApiResponse({ status: 200, description: 'Ticket encontrado' })
   @ApiResponse({ status: 400, description: 'ID inválido' })
   @ApiResponse({ status: 404, description: 'Ticket no encontrado' })
-  async findOne(@Req() req: Request & { user?: any }, @Param('id') id: string) {
+  async findOne(@Req() req: unknown, @Param('id') id: string) {
     // Si el solicitante proporcionó un header Authorization que puede ser un token de proyecto, restringir la respuesta a ese tipr_id
     const authHeader = req.headers?.authorization || null;
     if (authHeader) {
@@ -103,7 +124,8 @@ export class TicketsController {
       if (project) {
         const ticket = await this.ticketsService.findOne(+id);
         // el modelo ticket ahora usa tipr_id; el proyecto devuelto por findProjectByToken también contiene tipr_id
-        if ((ticket as any).tipr_id !== project.tipr_id)
+        const ticketTipr = (ticket as Record<string, unknown>)['tipr_id'];
+        if (typeof ticketTipr === 'number' && ticketTipr !== project.tipr_id)
           throw new NotFoundException('Ticket no encontrado');
         return ticket;
       }
@@ -118,11 +140,8 @@ export class TicketsController {
     summary: 'Obtener mensajes de chat de un ticket',
     description: 'Devuelve el historial de mensajes del ticket.',
   })
-  async getMessages(
-    @Req() req: Request & { user?: any },
-    @Param('id') id: string,
-  ) {
-    const user = req.user;
+  async getMessages(@Req() req: unknown, @Param('id') id: string) {
+    const user = this.extractAuthUser(req);
     // autorización: reutilizar findOne para validar existencia del ticket y el scope del proyecto
     const ticket = await this.ticketsService.findOne(Number(id));
     // se pueden añadir comprobaciones de permisos adicionales aquí si son necesarias
@@ -134,11 +153,11 @@ export class TicketsController {
   @Post(':id/files')
   @UseInterceptors(FilesInterceptor('attachments', 3))
   async uploadFiles(
-    @Req() req: Request & { user?: any },
+    @Req() req: unknown,
     @Param('id') id: string,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    const user: AuthUser = req.user;
+    const user: AuthUser | undefined = this.extractAuthUser(req);
     const created = await this.ticketsService.addFilesToTicket(
       Number(id),
       files || [],
@@ -202,11 +221,11 @@ export class TicketsController {
   })
   @UseInterceptors(FilesInterceptor('attachments', 3))
   create(
-    @Req() req: Request & { user?: any },
+    @Req() req: unknown,
     @Body() createDto: CreateTicketDto,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    const user: AuthUser = req.user;
+    const user: AuthUser | undefined = this.extractAuthUser(req);
     return this.ticketsService.create(createDto, files || [], user);
   }
 
@@ -260,12 +279,12 @@ export class TicketsController {
   })
   @UseInterceptors(FilesInterceptor('attachments', 3))
   update(
-    @Req() req: Request & { user?: any },
+    @Req() req: unknown,
     @Param('id') id: string,
     @Body() updateDto: UpdateTicketDto,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    const user: AuthUser = req.user;
+    const user: AuthUser | undefined = this.extractAuthUser(req);
     return this.ticketsService.update(+id, updateDto, files || [], user);
   }
 
@@ -288,8 +307,8 @@ export class TicketsController {
     description: 'Solo administradores (perf_id=2) pueden asignar tickets',
   })
   @ApiBody({ type: AssignTicketDto })
-  assign(@Req() req: Request & { user?: any }, @Body() body: AssignTicketDto) {
-    const user: AuthUser = req.user;
+  assign(@Req() req: unknown, @Body() body: AssignTicketDto) {
+    const user: AuthUser | undefined = this.extractAuthUser(req);
     // pasar categoría/prioridad opcional si vienen en el body
     return this.ticketsService.assign(
       Number(body.ticket_id),
@@ -307,10 +326,7 @@ export class TicketsController {
     summary: 'Obtener historial del ticket',
     description: 'Devuelve las entradas de ticket_historial para el ticket',
   })
-  async getHistory(
-    @Req() req: Request & { user?: any },
-    @Param('id') id: string,
-  ) {
+  async getHistory(@Req() req: unknown, @Param('id') id: string) {
     // reutilizar helper del servicio
     const data = await this.ticketsService.getHistory(Number(id));
     return { data };
@@ -336,12 +352,12 @@ export class TicketsController {
     description: 'Solo administradores (perf_id=2) pueden cerrar tickets',
   })
   close(
-    @Req() req: Request & { user?: any },
+    @Req() req: unknown,
     @Param('id') id: string,
     @Body() body: CloseTicketDto,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    const user: AuthUser = req.user;
+    const user: AuthUser | undefined = this.extractAuthUser(req);
     return this.ticketsService.close(+id, body.note, files || [], user);
   }
 
@@ -365,12 +381,12 @@ export class TicketsController {
   })
   @UseInterceptors(FilesInterceptor('attachments', 3))
   reopen(
-    @Req() req: Request & { user?: any },
+    @Req() req: unknown,
     @Param('id') id: string,
     @Body() body: ReopenTicketDto,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    const user: AuthUser = req.user;
+    const user: AuthUser | undefined = this.extractAuthUser(req);
     return this.ticketsService.reopen(+id, body.reason, files || [], user);
   }
 
@@ -392,32 +408,43 @@ export class TicketsController {
   })
   @ApiResponse({ status: 404, description: 'Archivo o ticket no encontrado' })
   async downloadFile(
-    @Req() req: Request & { user?: any },
+    @Req() req: unknown,
     @Param('id') id: string,
     @Param('filename') filename: string,
-    @Res({ passthrough: true }) res: any,
+    @Res({ passthrough: true }) res: Response,
   ) {
     // asegurar que el archivo existe en la BD
-    const files = await this.ticketsService
-      .findOne(+id)
-      .then((t) => (t as any).files as any[])
-      .catch(() => null);
-    if (!files) throw new NotFoundException('Ticket o archivos no encontrados');
-    // los registros de archivos guardados usan tifi_filename / tifi_url / tifi_mime
-    const file = files.find(
-      (f) =>
-        f.tifi_filename === filename ||
-        f.tifi_filename === decodeURIComponent(filename),
-    );
+    const ticket = await this.ticketsService.findOne(+id).catch(() => null);
+    if (!ticket)
+      throw new NotFoundException('Ticket o archivos no encontrados');
+    const filesRaw = (ticket as Record<string, unknown>)['files'];
+    if (!Array.isArray(filesRaw))
+      throw new NotFoundException('Ticket o archivos no encontrados');
+    const file = filesRaw.find((f) => {
+      if (!f || typeof f !== 'object') return false;
+      const fr = f as Record<string, unknown>;
+      const fname = fr['tifi_filename'];
+      if (typeof fname !== 'string') return false;
+      return fname === filename || fname === decodeURIComponent(filename);
+    }) as Record<string, unknown> | undefined;
     if (!file) throw new NotFoundException('Archivo no encontrado');
 
-    res.setHeader('Content-Type', file.tifi_mime || 'application/octet-stream');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${file.tifi_filename}"`,
-    );
-    return new StreamableFile(
-      fs.createReadStream(file.tifi_url || file.tifi_path || file.path),
-    );
+    const mime =
+      typeof file['tifi_mime'] === 'string'
+        ? file['tifi_mime']
+        : 'application/octet-stream';
+    const fname =
+      typeof file['tifi_filename'] === 'string'
+        ? file['tifi_filename']
+        : 'file';
+    const url =
+      (typeof file['tifi_url'] === 'string' && file['tifi_url']) ||
+      (typeof file['tifi_path'] === 'string' && file['tifi_path']) ||
+      (typeof file['path'] === 'string' && file['path']);
+    if (!url) throw new NotFoundException('Archivo no encontrado');
+
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+    return new StreamableFile(fs.createReadStream(url));
   }
 }
