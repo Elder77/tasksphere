@@ -21,17 +21,35 @@ export class CreateTicketDto {
   @IsNotEmpty()
   tick_nombre: string;
 
+  // Alias en inglés por compatibilidad con varios clientes
+  @ApiProperty({ required: false })
+  @IsString()
+  title?: string;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
   tick_descripcion: string;
+
+  // Alias en inglés
+  @ApiProperty({ required: false })
+  @IsString()
+  description?: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
   tick_modulo: string;
 
-  @ApiProperty({ description: 'Cédula del usuario creador (si no se proporciona se tomará del token)' })
+  // Alias en inglés
+  @ApiProperty({ required: false })
+  @IsString()
+  module?: string;
+
+  @ApiProperty({
+    description:
+      'Cédula del usuario creador (si no se proporciona se tomará del token)',
+  })
   @IsString()
   @IsNotEmpty()
   usua_cedula?: string;

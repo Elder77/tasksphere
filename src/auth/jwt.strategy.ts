@@ -1,20 +1,30 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '../config/config.service';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private readonly config: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      // Usa variable de entorno JWT_SECRET en producción. Se mantiene un fallback para desarrollo.
-      secretOrKey: process.env.JWT_SECRET || 'mi_secreto_super_seguro',
+      // Usar secret inyectado por ConfigService
+      secretOrKey: config.getJwtSecret(),
     });
   }
 
-  async validate(payload: any) {
-    // Return the user's usua_cedula (primary key) so request.user.usua_cedula is available
-    return { usua_cedula: payload.sub, usua_email: payload.usua_email, perf_id: payload.perf_id};
+  validate(payload: unknown) {
+    // Normalizar payload JWT con tipo seguro
+    const p = payload as {
+      sub?: string;
+      usua_email?: string;
+      perf_id?: number;
+    };
+    return {
+      usua_cedula: p.sub,
+      usua_email: p.usua_email,
+      perf_id: p.perf_id,
+    };
   }
 }

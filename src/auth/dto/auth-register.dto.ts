@@ -23,7 +23,10 @@ export class AuthRegisterDto {
   @IsNotEmpty()
   usua_email: string;
 
-  @ApiProperty({ example: '3333333333', description: 'Número de celular del usuario' })
+  @ApiProperty({
+    example: '3333333333',
+    description: 'Número de celular del usuario',
+  })
   @IsString()
   @IsNotEmpty()
   usua_celular: string;
@@ -33,7 +36,11 @@ export class AuthRegisterDto {
   @IsNotEmpty()
   usua_password: string;
 
-  @ApiProperty({ example: 1, required: false, description: 'Perfil del usuario: 1=usuario, 2=admin' })
+  @ApiProperty({
+    example: 1,
+    required: false,
+    description: 'Perfil del usuario: 1=usuario, 2=admin',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

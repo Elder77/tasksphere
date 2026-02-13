@@ -2,41 +2,39 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-import { join,resolve } from 'path';
+import { resolve } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
-
 async function bootstrap() {
-   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   // Filtro global de errores
   app.useGlobalFilters(new AllExceptionsFilter());
-    // 🔹 Servir archivos estáticos desde la carpeta /uploads
-app.useStaticAssets(resolve(process.cwd(), 'uploads'), {
-  prefix: '/uploads/',
-});
+  // 🔹 Servir archivos estáticos desde la carpeta /uploads
+  app.useStaticAssets(resolve(process.cwd(), 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   // Swagger (opcional): intenta cargar @nestjs/swagger si está instalado
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
+    const swagger = await import('@nestjs/swagger');
+    const { SwaggerModule, DocumentBuilder } = swagger;
     const config = new DocumentBuilder()
       .setTitle('Tasksphere API')
       .setDescription('Documentación de la API de Tasksphere')
       .setVersion('1.0')
-      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'access-token')
+      .addBearerAuth(
+        { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        'access-token',
+      )
       .build();
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('docs', app, document, {
       swaggerOptions: { persistAuthorization: true },
     });
-    // debug log to confirm setup
-    // eslint-disable-next-line no-console
     console.log('[main] Swagger UI montado en /docs');
-  } catch (e) {
-    // paquete no instalado o fallo al configurar Swagger; se omite Swagger
-    // eslint-disable-next-line no-console
-    console.error('[main] Swagger setup failed:', e && e.message ? e.message : e);
+  } catch (err) {
+    console.error('[main] Swagger setup failed:', String(err));
   }
   // Habilitar CORS para que el frontend (Next.js) pueda llamar al backend desde el navegador
   // En producción ajusta origin a los orígenes permitidos (ej: ['https://mi-frontend.com'])
@@ -46,7 +44,7 @@ app.useStaticAssets(resolve(process.cwd(), 'uploads'), {
   await app.listen(port, host);
   // Log the effective URL to help testing from LAN
   const displayHost = host === '0.0.0.0' ? '0.0.0.0 (all interfaces)' : host;
-  // eslint-disable-next-line no-console
+
   console.log(`[main] Listening on http://${displayHost}:${port}`);
 }
 bootstrap();

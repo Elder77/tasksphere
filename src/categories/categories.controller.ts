@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Put,
+  Param,
+  Delete,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { TicketCategoriasService } from './categories.service';
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';
@@ -13,10 +23,10 @@ export class TicketCategoriasController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get()
-  findAll(@Query() query: any) {
+  findAll(@Query() query: { page?: string; perPage?: string; q?: string }) {
     const hasPage = query?.page !== undefined || query?.perPage !== undefined;
-    const page = query?.page ?? 1;
-    const perPage = query?.perPage ?? 10;
+    const page = query?.page ? Number(query.page) : 1;
+    const perPage = query?.perPage ? Number(query.perPage) : 10;
     const q = query?.q ?? undefined;
     if (hasPage) return this.service.findAllPaged(page, perPage, q);
     return this.service.findAll(q);

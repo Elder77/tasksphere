@@ -1,8 +1,18 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, Length, IsEmail, Matches } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsInt,
+  Length,
+  IsEmail,
+  Matches,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserDto {
-  @ApiProperty({ description: 'Cédula del usuario (PK en la tabla ticket_usuarios)' })
+  @ApiProperty({
+    description: 'Cédula del usuario (PK en la tabla ticket_usuarios)',
+  })
   @IsString()
   @IsNotEmpty()
   @Length(6, 11)

@@ -12,33 +12,55 @@ export class TicketPrioridadesService {
     if (q && String(q).trim()) {
       where.prio_nombre = { contains: String(q).trim(), mode: 'insensitive' };
     }
-    return this.prisma.ticket_prioridades.findMany({ where, orderBy: { fecha_sistema: 'desc' } });
+    return this.prisma.ticket_prioridades.findMany({
+      where,
+      orderBy: { fecha_sistema: 'desc' },
+    });
   }
 
   async findAllPaged(page = 1, perPage = 10, q?: string) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
     const where: any = {};
-    if (q && String(q).trim()) where.prio_nombre = { contains: String(q).trim(), mode: 'insensitive' };
+    if (q && String(q).trim())
+      where.prio_nombre = { contains: String(q).trim(), mode: 'insensitive' };
     const [total, data] = await Promise.all([
       this.prisma.ticket_prioridades.count({ where }),
-      this.prisma.ticket_prioridades.findMany({ where, skip: (p - 1) * pp, take: pp, orderBy: { fecha_sistema: 'desc' } }),
+      this.prisma.ticket_prioridades.findMany({
+        where,
+        skip: (p - 1) * pp,
+        take: pp,
+        orderBy: { fecha_sistema: 'desc' },
+      }),
     ]);
-    return { data, meta: { total, page: p, perPage: pp, totalPages: Math.ceil(total / pp) } };
+    return {
+      data,
+      meta: { total, page: p, perPage: pp, totalPages: Math.ceil(total / pp) },
+    };
   }
 
   async findOne(prio_id: number) {
-    const p = await this.prisma.ticket_prioridades.findUnique({ where: { prio_id } });
+    const p = await this.prisma.ticket_prioridades.findUnique({
+      where: { prio_id },
+    });
     if (!p) throw new NotFoundException('Prioridad no encontrada');
     return p;
   }
 
   create(dto: CreatePrioridadDto) {
-    return this.prisma.ticket_prioridades.create({ data: { prio_nombre: dto.prio_nombre, prio_estado: dto.prio_estado ?? 'A' } });
+    return this.prisma.ticket_prioridades.create({
+      data: {
+        prio_nombre: dto.prio_nombre,
+        prio_estado: dto.prio_estado ?? 'A',
+      },
+    });
   }
 
   update(prio_id: number, dto: UpdatePrioridadDto) {
-    return this.prisma.ticket_prioridades.update({ where: { prio_id }, data: dto });
+    return this.prisma.ticket_prioridades.update({
+      where: { prio_id },
+      data: dto,
+    });
   }
 
   remove(prio_id: number) {

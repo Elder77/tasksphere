@@ -1,9 +1,17 @@
-import { IsNotEmpty, IsString, IsInt, IsBoolean, IsOptional } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsInt,
+  IsBoolean,
+  IsOptional,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateIdentifierDto {
   @ApiProperty({ description: 'Proyecto (tipr_id)', required: true })
-  @IsInt({ message: 'El proyecto (tipr_id) es obligatorio y debe ser numérico' })
+  @IsInt({
+    message: 'El proyecto (tipr_id) es obligatorio y debe ser numérico',
+  })
   @IsNotEmpty({ message: 'El proyecto es obligatorio' })
   tipr_id: number;
 
@@ -42,7 +50,10 @@ export class CreateIdentifierDto {
   @IsBoolean()
   tiid_alpha_numeric?: boolean;
 
-  @ApiProperty({ description: 'Expresión regular que debe cumplir el valor', required: false })
+  @ApiProperty({
+    description: 'Expresión regular que debe cumplir el valor',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   tiid_regex?: string;

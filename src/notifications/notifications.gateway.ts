@@ -1,57 +1,121 @@
-import { WebSocketGateway, OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
+import {
+  WebSocketGateway,
+  OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+} from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma/prisma.service';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'mi_secreto_super_seguro';
+import { ConfigService } from '../config/config.service';
 
 @WebSocketGateway({ namespace: '/ws/notifications', cors: { origin: '*' } })
 @Injectable()
-export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class NotificationsGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   private server: Server;
   private readonly logger = new Logger(NotificationsGateway.name);
-  constructor(private prisma: PrismaService) {}
+  private jwtSecret: string;
+  constructor(
+    private prisma: PrismaService,
+    private config: ConfigService,
+  ) {
+    this.jwtSecret = this.config.getJwtSecret();
+  }
+
+  private isUserObject(
+    x: unknown,
+  ): x is { usua_cedula?: string; sub?: string } {
+    return typeof x === 'object' && x !== null;
+  }
 
   afterInit(server: Server) {
     this.server = server;
     // middleware to authenticate socket connections for notifications namespace
-    server.use((socket: any, next: any) => {
+    server.use((socket: Socket, next: (err?: Error) => void) => {
       (async () => {
         try {
-          let token = (socket.handshake.auth && socket.handshake.auth.token) || (socket.handshake.query && socket.handshake.query.token);
-          if (!token) return next(); // allow anonymous connection, we'll still accept but can't emit user-targeted events
+          const authPart = socket.handshake.auth;
+          const queryPart = socket.handshake.query;
+          let token: string | undefined;
+
+          if (authPart && typeof authPart === 'object' && 'token' in authPart) {
+            const t = (authPart as Record<string, unknown>).token;
+            if (typeof t === 'string') token = t;
+          }
+          if (
+            !token &&
+            queryPart &&
+            typeof queryPart === 'object' &&
+            'token' in queryPart
+          ) {
+            const t = (queryPart as Record<string, unknown>).token;
+            if (typeof t === 'string') token = t;
+          }
+
+          if (!token) return next(); // anonymous allowed
+
           if (typeof token === 'string') {
             token = token.replace(/^"|"$/g, '');
             if (token.startsWith('Bearer ')) token = token.slice(7);
           }
+
           try {
-            const payload: any = jwt.verify(token, JWT_SECRET);
-            socket.data = socket.data || {};
-            socket.data.user = { usua_cedula: payload.sub, usua_email: payload.usua_email ?? payload.email, perf_id: payload.perf_id, tipr_id: payload.tipr_id };
-            return next();
-          } catch (e) {
-            // try project token
+            const raw = jwt.verify(token, this.jwtSecret) as unknown;
+            if (raw && typeof raw === 'object') {
+              const payload = raw as {
+                sub?: string;
+                usua_email?: string;
+                email?: string;
+                perf_id?: number;
+                tipr_id?: number;
+              };
+              socket.data = socket.data || {};
+              socket.data.user = {
+                usua_cedula: payload.sub,
+                usua_email: payload.usua_email ?? payload.email,
+                perf_id: payload.perf_id,
+                tipr_id: payload.tipr_id,
+              };
+              return next();
+            }
+          } catch (verifyErr) {
             try {
-              const project = await this.prisma.ticket_proyectos.findFirst({ where: { tipr_token: String(token) } });
+              const project = await this.prisma.ticket_proyectos.findFirst({
+                where: { tipr_token: String(token) },
+              });
               if (project) {
                 socket.data = socket.data || {};
-                socket.data.user = { tipr_id: project.tipr_id, project_token: true };
+                socket.data.user = {
+                  tipr_id: project.tipr_id,
+                  project_token: true,
+                };
                 return next();
               }
-            } catch (ee) {
-              // ignore
+            } catch (dbErr) {
+              this.logger.debug(
+                'Project token lookup failed: ' + String(dbErr),
+              );
             }
-            // token invalid -> continue without user info
-            this.logger.warn('Notifications socket auth failed: ' + (e && (e as any).message ? (e as any).message : String(e)));
+            this.logger.warn(
+              'Notifications socket auth failed for token: ' +
+                String(verifyErr),
+            );
             return next();
           }
         } catch (err) {
-          this.logger.warn('Notifications socket auth unexpected error: ' + String(err));
+          this.logger.warn(
+            'Notifications socket auth unexpected error: ' + String(err),
+          );
           return next();
         }
       })().catch((err) => {
-        this.logger.warn('Notifications socket auth unexpected error: ' + String(err));
+        this.logger.warn(
+          'Notifications socket auth unexpected error: ' + String(err),
+        );
         return next();
       });
     });
@@ -59,26 +123,39 @@ export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection,
 
   handleConnection(client: Socket) {
     try {
-      const u = (client as any).data?.user?.usua_cedula || (client as any).data?.user?.sub;
-      this.logger.debug(`[NotificationsGateway] client connected ${client.id} user=${u}`);
+      const userObj = client.data?.user;
+      const userObj: unknown = (client.data as unknown)?.user;
+      let u: string | undefined;
+      if (this.isUserObject(userObj)) {
+        u =
+          userObj.usua_cedula ??
+          (userObj as { usua_cedula?: string; sub?: string }).sub;
+      }
+      this.logger.debug(
+        `[NotificationsGateway] client connected ${client.id} user=${u}`,
+      );
       if (u) {
         // join a dedicated room per user to simplify targeted emits
         client.join(`user_${String(u)}`);
       }
     } catch (e) {
-      this.logger.warn('[NotificationsGateway] handleConnection error: ' + String(e));
+      this.logger.warn(
+        '[NotificationsGateway] handleConnection error: ' + String(e),
+      );
     }
   }
 
   handleDisconnect(client: Socket) {
     try {
-      this.logger.debug(`[NotificationsGateway] client disconnected ${client.id}`);
+      this.logger.debug(
+        `[NotificationsGateway] client disconnected ${client.id}`,
+      );
     } catch (e) {
       // ignore
     }
   }
 
-  async emitToUser(usua_cedula: string, payload: any) {
+  emitToUser(usua_cedula: string, payload: unknown) {
     if (!this.server) return;
     try {
       // Prefer room-based emit: each socket joins room `user_<cedula>` on connect
@@ -89,12 +166,17 @@ export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection,
         return;
       } catch (e) {
         // fallback to per-socket iteration if room emit fails
-        this.logger.debug('emitToUser room emit failed, falling back to individual sockets: ' + String(e));
+        this.logger.debug(
+          'emitToUser room emit failed, falling back to individual sockets: ' +
+            String(e),
+        );
       }
 
       // Fallback: gather sockets list robustly across socket.io versions / adapters
-      const socketsList: any[] = [];
-      const sContainer: any = (this.server as any).sockets;
+      const socketsList: Socket[] = [];
+      const sContainer: unknown = (
+        this.server as unknown as { sockets?: unknown }
+      ).sockets;
       if (!sContainer) {
         this.logger.debug('No sockets container available on server');
         return;
@@ -122,12 +204,17 @@ export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection,
       let matched = 0;
       for (const s of socketsList) {
         try {
-          const sockUser = (s as any).data?.user?.usua_cedula || (s as any).data?.user?.sub;
-          if (sockUser && String(sockUser) === String(usua_cedula)) {
-            (s as any).emit('notification', payload);
-            matched++;
+          const uObj: unknown = (s as Socket & { data?: unknown }).data?.user;
+          if (this.isUserObject(uObj)) {
+            const sockUser =
+              uObj.usua_cedula ??
+              (uObj as { usua_cedula?: string; sub?: string }).sub;
+            if (sockUser && String(sockUser) === String(usua_cedula)) {
+              s.emit('notification', payload);
+              matched++;
+            }
           }
-        } catch (e) {
+        } catch {
           // ignore per-socket errors
         }
       }
@@ -137,7 +224,7 @@ export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection,
     }
   }
 
-  async emitToAll(payload: any) {
+  emitToAll(payload: unknown) {
     if (!this.server) return;
     this.server.emit('notification', payload);
   }

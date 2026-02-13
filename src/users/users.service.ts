@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -17,9 +21,17 @@ export class UsersService {
     const where = {} as any;
     const [total, data] = await Promise.all([
       this.prisma.ticket_usuarios.count({ where }),
-      this.prisma.ticket_usuarios.findMany({ where, skip: (p - 1) * pp, take: pp, orderBy: { usua_fecha_sistema: 'desc' } }),
+      this.prisma.ticket_usuarios.findMany({
+        where,
+        skip: (p - 1) * pp,
+        take: pp,
+        orderBy: { usua_fecha_sistema: 'desc' },
+      }),
     ]);
-    return { data, meta: { total, page: p, perPage: pp, totalPages: Math.ceil(total / pp) } };
+    return {
+      data,
+      meta: { total, page: p, perPage: pp, totalPages: Math.ceil(total / pp) },
+    };
   }
 
   async findFiltered(query: any) {
@@ -36,12 +48,17 @@ export class UsersService {
     if (query?.usua_cedula) {
       where.usua_cedula = String(query.usua_cedula);
     }
-    return this.prisma.ticket_usuarios.findMany({ where, orderBy: { usua_fecha_sistema: 'desc' } });
+    return this.prisma.ticket_usuarios.findMany({
+      where,
+      orderBy: { usua_fecha_sistema: 'desc' },
+    });
   }
 
   async create(data: CreateUserDto) {
     // Requerir usua_cedula del solicitante. Si ya existe, rechazar.
-    const exists = await this.prisma.ticket_usuarios.findUnique({ where: { usua_cedula: data.usua_cedula } });
+    const exists = await this.prisma.ticket_usuarios.findUnique({
+      where: { usua_cedula: data.usua_cedula },
+    });
     if (exists) {
       // Devolver un objeto de error específico por campo para que el frontend lo muestre inline
       throw new BadRequestException({ usua_cedula: ['La cédula ya existe'] });
@@ -58,7 +75,10 @@ export class UsersService {
       usua_email: data.usua_email ?? `${data.usua_nombres}@local.test`,
       usua_password: hashed,
       // almacenar celular como string (la BD espera VarChar(10))
-      usua_celular: data.usua_celular !== undefined && data.usua_celular !== null ? String(data.usua_celular) : '',
+      usua_celular:
+        data.usua_celular !== undefined && data.usua_celular !== null
+          ? String(data.usua_celular)
+          : '',
       usua_activo: 'A',
       usua_cambio_password: new Date(),
       // permitir al solicitante establecer perf_id si lo provee, de lo contrario por defecto 2 (soporte)
@@ -67,7 +87,9 @@ export class UsersService {
     };
 
     try {
-      const created = await this.prisma.ticket_usuarios.create({ data: payload });
+      const created = await this.prisma.ticket_usuarios.create({
+        data: payload,
+      });
       return created;
     } catch (e: any) {
       // Convertir errores de Prisma/internos a BadRequestException legible cuando sea posible
@@ -80,15 +102,25 @@ export class UsersService {
           if (Array.isArray(target) && target.length) field = String(target[0]);
           else if (typeof target === 'string') field = target;
           // normalizar tokens de campo a claves conocidas
-          const keyNorm = field ? String(field).toLowerCase().replace(/[^a-z0-9]/g, '') : null;
+          const keyNorm = field
+            ? String(field)
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '')
+            : null;
           const map: Record<string, string> = {
-            usua_cedula: 'usua_cedula', cedula: 'usua_cedula', usua_email: 'usua_email', email: 'usua_email',
+            usua_cedula: 'usua_cedula',
+            cedula: 'usua_cedula',
+            usua_email: 'usua_email',
+            email: 'usua_email',
           };
-          const mapped = keyNorm ? (map[keyNorm] || field) : field;
+          const mapped = keyNorm ? map[keyNorm] || field : field;
           const obj: any = {};
           if (mapped) {
             // user-friendly Spanish message
-            const msg = mapped === 'usua_email' ? 'El email ya existe' : 'La cédula ya existe';
+            const msg =
+              mapped === 'usua_email'
+                ? 'El email ya existe'
+                : 'La cédula ya existe';
             obj[mapped] = [msg];
             throw new BadRequestException(obj);
           }
@@ -98,7 +130,7 @@ export class UsersService {
         if (inner instanceof BadRequestException) throw inner;
       }
 
-      const msg = (e && e.message) ? String(e.message) : 'Error al crear usuario';
+      const msg = e && e.message ? String(e.message) : 'Error al crear usuario';
       throw new BadRequestException(msg);
     }
   }
@@ -107,14 +139,15 @@ export class UsersService {
     // permitir actualizar campos básicos del usuario; la contraseña debe hashearse si se provee
     const data: any = {};
     if (dto.usua_nombres !== undefined) data.usua_nombres = dto.usua_nombres;
-    if (dto.usua_apellidos !== undefined) data.usua_apellidos = dto.usua_apellidos;
+    if (dto.usua_apellidos !== undefined)
+      data.usua_apellidos = dto.usua_apellidos;
     if (dto.usua_email !== undefined) data.usua_email = dto.usua_email;
     if (dto.usua_celular !== undefined) {
       // almacenar celular como string para coincidir con el esquema de Prisma (se aceptan varios formatos)
       data.usua_celular = String(dto.usua_celular ?? '');
     }
     if (dto.perf_id !== undefined) data.perf_id = dto.perf_id;
-  // nota: el modelo ticket_usuarios no incluye la columna tipr_id en el esquema
+    // nota: el modelo ticket_usuarios no incluye la columna tipr_id en el esquema
     if (dto.usua_password !== undefined) {
       data.usua_password = await bcrypt.hash(dto.usua_password, 10);
     }

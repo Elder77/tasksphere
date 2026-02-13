@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
 @Injectable()
@@ -6,10 +11,16 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.get<string[]>('roles', context.getHandler());
+    const requiredRoles = this.reflector.get<string[]>(
+      'roles',
+      context.getHandler(),
+    );
     if (!requiredRoles) return true;
 
-    const { user } = context.switchToHttp().getRequest();
+    const req = context
+      .switchToHttp()
+      .getRequest<{ user?: { perf_id?: number } }>();
+    const user = req.user;
 
     // Map simple role names to perf_id values: 'user' -> 1, 'admin' -> 2
     const allowed = requiredRoles.some((r) => {
@@ -21,7 +32,9 @@ export class RolesGuard implements CanActivate {
     });
 
     if (!allowed) {
-      throw new ForbiddenException('No tienes permisos para acceder a esta ruta');
+      throw new ForbiddenException(
+        'No tienes permisos para acceder a esta ruta',
+      );
     }
 
     return true;

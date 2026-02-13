@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Body, UseGuards, Patch, Param, Req, ForbiddenException, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Patch,
+  Param,
+  Req,
+  ForbiddenException,
+  Query,
+} from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,13 +26,26 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  async getAll(@Query() query: any) {
+  async getAll(
+    @Query()
+    query: {
+      page?: string;
+      perPage?: string;
+      perf_id?: string;
+      usua_estado?: string;
+      all?: string;
+    },
+  ) {
     // soportar paginación: page, perPage
     const hasPage = query?.page !== undefined || query?.perPage !== undefined;
-    const page = query?.page ?? 1;
-    const perPage = query?.perPage ?? 10;
+    const page = Number(query?.page ?? 1);
+    const perPage = Number(query?.perPage ?? 10);
     // si hay filtros presentes (perf_id, usua_estado) devolver lista filtrada (sin paginación)
-    if (query?.perf_id !== undefined || query?.usua_estado !== undefined || query?.all === 'true') {
+    if (
+      query?.perf_id !== undefined ||
+      query?.usua_estado !== undefined ||
+      query?.all === 'true'
+    ) {
       return this.usersService.findFiltered(query);
     }
     if (hasPage) {
@@ -38,12 +63,16 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @Patch(':usua_cedula')
-  async update(@Param('usua_cedula') usua_cedula: string, @Body() dto: UpdateUserDto, @Req() req: any) {
+  async update(
+    @Param('usua_cedula') usua_cedula: string,
+    @Body() dto: UpdateUserDto,
+    @Req() req: Request & { user?: { perf_id?: number; usua_cedula?: string } },
+  ) {
     // permitir sólo al admin o al mismo usuario actualizar
-    const authUser: any = (req as any).user;
+    const authUser = req.user;
     if (authUser?.perf_id !== 2 && authUser?.usua_cedula !== usua_cedula) {
       throw new ForbiddenException('No autorizado');
     }
-    return this.usersService.update(usua_cedula, dto as any);
+    return this.usersService.update(usua_cedula, dto as UpdateUserDto);
   }
 }
