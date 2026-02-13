@@ -1,9 +1,9 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Query, Get, Param, Put, Delete } from '@nestjs/common';
 import { IdentifiersService } from './identifiers.service';
 import { CreateIdentifierDto } from './dto/create-identifier.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { Get, Param, Put, Delete } from '@nestjs/common';
+// ...existing imports consolidated above
 import { UpdateIdentifierDto } from './dto/update-identifier.dto';
 
 
@@ -16,7 +16,7 @@ export class IdentifiersController {
   @ApiBearerAuth('access-token')
   @Post()
   @ApiOperation({ summary: 'Crear identificador', description: 'Crea un nuevo identificador para usar en tickets. Nombre único.' })
-  @ApiResponse({ status: 201, description: 'Identificador creado correctamente', schema: { example: { tiid_id: 1, tiid_nombre: 'Placa', tiid_descripcion: 'Número de placa', tiid_tipo_dato: 'string' } } })
+  @ApiResponse({ status: 201, description: 'Identificador creado correctamente', schema: { example: { tiid_id: 1, tipr_id:'1', tiid_nombre: 'Placa', tiid_descripcion: 'Número de placa', tiid_tipo_dato: 'string' } } })
   @ApiResponse({ status: 400, description: 'Datos inválidos o identificador existente', schema: { example: { statusCode: 400, message: 'Identificador con ese nombre ya existe' } } })
   @ApiResponse({ status: 401, description: 'No autorizado', schema: { example: { statusCode: 401, message: 'No autorizado' } } })
   create(@Body() dto: CreateIdentifierDto) {
@@ -28,8 +28,13 @@ export class IdentifiersController {
   @Get()
   @ApiOperation({ summary: 'Listar identificadores', description: 'Devuelve todos los identificadores disponibles.' })
   @ApiResponse({ status: 200, description: 'Listado de identificadores', schema: { example: [{ tiid_id: 1, tiid_nombre: 'Placa', tiid_tipo_dato: 'string' }] } })
-  findAll() {
-    return this.identifiersService.findAll();
+  findAll(@Query() query: any) {
+    const hasPage = query?.page !== undefined || query?.perPage !== undefined;
+    const page = query?.page ?? 1;
+    const perPage = query?.perPage ?? 10;
+    const q = query?.q ?? undefined;
+    if (hasPage) return this.identifiersService.findAllPaged(page, perPage, q);
+    return this.identifiersService.findAll(q);
   }
 
   @UseGuards(JwtAuthGuard)

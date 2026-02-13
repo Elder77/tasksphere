@@ -38,7 +38,10 @@ app.useStaticAssets(resolve(process.cwd(), 'uploads'), {
     // eslint-disable-next-line no-console
     console.error('[main] Swagger setup failed:', e && e.message ? e.message : e);
   }
-  const port = Number(process.env.PORT) || 3000;
+  // Habilitar CORS para que el frontend (Next.js) pueda llamar al backend desde el navegador
+  // En producción ajusta origin a los orígenes permitidos (ej: ['https://mi-frontend.com'])
+  app.enableCors({ origin: true, credentials: true });
+  const port = Number(process.env.PORT);
   const host = process.env.HOST || '0.0.0.0';
   await app.listen(port, host);
   // Log the effective URL to help testing from LAN

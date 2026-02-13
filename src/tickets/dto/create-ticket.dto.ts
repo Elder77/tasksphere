@@ -10,6 +10,12 @@ export class CreateTicketDto {
   @IsInt()
   tiid_id: number;
 
+  @ApiProperty({ description: 'ID del proyecto' })
+  @Type(() => Number)
+  @IsInt()
+  @IsNotEmpty({ message: 'El proyecto es obligatorio' })
+  tipr_id: number;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()

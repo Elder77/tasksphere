@@ -25,11 +25,8 @@ export class AuthService {
 
   constructor(private jwtService: JwtService, private prisma: PrismaService) {}
 
-  /**
-   * Register a user into the database. If `username` looks like an email it will be used
-   * as `email`, otherwise we synthesize a local email to satisfy the schema.
-   */
-  async register(usua_cedula: string, usua_nombres: string, password: string, perf_id: number = 1) {
+
+  async register(usua_cedula: string, usua_nombres: string, usua_apellidos: string, usua_email: string, usua_celular: string, password: string, perf_id: number = 1) {
     // Ensure caller provided a cédula and it doesn't exist already
     if (!usua_cedula) throw new BadRequestException('usua_cedula es requerido');
     const exists = await this.prisma.ticket_usuarios.findUnique({ where: { usua_cedula } });
@@ -37,22 +34,19 @@ export class AuthService {
 
   const hashed = await bcrypt.hash(password, 10);
 
-    // derive email for Prisma User (email is unique and required)
-    const usua_email = usua_nombres.includes('@') ? usua_nombres : `${usua_nombres}@local.test`;
 
     const user = await this.prisma.ticket_usuarios.create({
       data: {
         usua_cedula,
         usua_nombres,
-        usua_apellidos: '',
+        usua_apellidos: usua_apellidos,
         usua_password: hashed,
         usua_email,
-        usua_celular: '0000000000',
+  usua_celular: (usua_celular as unknown) as any,
         perf_id: perf_id,
-        usua_activo: 'Y',
+        usua_activo: 'A',
         usua_cambio_password: new Date(),
-        usua_fecha_sistema: new Date(),
-        proy_id: 1,
+  usua_fecha_sistema: new Date(),
       },
     });
 
@@ -66,6 +60,11 @@ export class AuthService {
     // try DB lookup by cédula
     const user = await this.prisma.ticket_usuarios.findUnique({ where: { usua_cedula } });
     if (user) {
+      // only allow login if usua_login flag is explicitly 'Si'
+      if (String(user.usua_login).toLowerCase() !== 'si') {
+        // give a generic unauthorized to avoid leaking info
+        throw new UnauthorizedException('Credenciales inválidas o usuario no habilitado para login');
+      }
       const ok = await bcrypt.compare(password, user.usua_password);
       if (!ok) throw new UnauthorizedException('Credenciales inválidas');
       const payload = { usua_nombres: user.usua_nombres, sub: user.usua_cedula, perf_id: user.perf_id };

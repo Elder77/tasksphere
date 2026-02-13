@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsString } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AssignTicketDto {
@@ -10,4 +10,14 @@ export class AssignTicketDto {
   @IsString()
   @IsNotEmpty()
   tick_usuario_asignado: string;
+
+  @ApiProperty({ description: 'ID de categoría (opcional)', required: false })
+  @IsOptional()
+  @IsInt()
+  tica_id?: number;
+
+  @ApiProperty({ description: 'ID de prioridad (opcional)', required: false })
+  @IsOptional()
+  @IsInt()
+  prio_id?: number;
 }

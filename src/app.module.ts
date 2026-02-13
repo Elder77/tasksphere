@@ -8,9 +8,10 @@ import { AuthModule } from './auth/auth.module';
 // ChatModule removed per requirements (handled inside Tickets module)
 import { TicketsModule } from './tickets/tickets.module';
 import { IdentifiersModule } from './identifiers/identifiers.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
-  imports: [UsersModule, PrismaModule, AuthModule, TicketsModule, IdentifiersModule],
+  imports: [UsersModule, PrismaModule, AuthModule, TicketsModule, IdentifiersModule, NotificationsModule],
   controllers: [AppController],
   providers: [AppService],
 })

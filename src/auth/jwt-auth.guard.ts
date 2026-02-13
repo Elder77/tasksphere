@@ -17,18 +17,25 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       // ignore and try project token fallback below
     }
 
-    // Fallback: try to treat provided token as a project token stored in `proyectos.proy_token`.
-    const req = context.switchToHttp().getRequest();
-    const auth = req.headers?.authorization || req.query?.token || null;
-    if (!auth) throw new UnauthorizedException('No se encontró el token de autenticación');
+  // Fallback: try to treat provided token as a project token stored in `proyectos.proy_token`.
+  const req = context.switchToHttp().getRequest();
 
-    let token = String(auth || '');
-    if (token.startsWith('Bearer ')) token = token.slice(7);
+  // Accept token from several common locations to be more tolerant with clients / Swagger UI
+  const headerAuth = req.headers?.authorization || req.headers?.Authorization || req.headers?.['x-access-token'] || req.headers?.['x-token'] || req.headers?.token;
+  const bodyToken = req.body?.token;
+  const queryToken = req.query?.token;
+  const auth = headerAuth || queryToken || bodyToken || null;
+  if (!auth) throw new UnauthorizedException('No se encuentra autenticado');
 
-    const project = await this.prisma.proyectos.findFirst({ where: { proy_token: token } });
+  let token = String(auth || '');
+  if (token.startsWith('Bearer ')) token = token.slice(7);
+
+    // check against ticket_proyectos.tipr_token (backwards-compatible: expose as tipr_id)
+    const project = await this.prisma.ticket_proyectos.findFirst({ where: { tipr_token: token } });
     if (project) {
-      // attach lightweight project user to request so controllers/services can scope by proy_id
-      req.user = { proy_id: project.proy_id, project_token: true };
+      // attach lightweight project user to request so controllers/services can scope by tipr_id
+      // keep property name `tipr_id` for backward compatibility but use tipr_id value
+      req.user = { tipr_id: project.tipr_id, project_token: true };
       return true;
     }
 

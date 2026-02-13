@@ -7,14 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model proyectos {
-  proy_id       Int       @id @default(autoincrement())
-  proy_nombre   String?   @db.VarChar(100)
-  proy_token    String?   @db.VarChar(200)
-  fecha_sistema DateTime? @db.Timestamp(0)
-}
-
 model ticked_file {
   tifi_id       Int       @id @default(autoincrement())
   tick_id       Int
@@ -32,12 +24,16 @@ model ticket {
   tick_id_identificador Int
   tick_nombre           String?   @db.VarChar(200)
   tick_descripcion      String?   @db.Text
-  tick_estado           String?   @default("A") @db.Char(1)
+  tick_estado           String?   @default("P") @db.Char(1)
   tick_modulo           String?   @db.VarChar(50)
   tick_usuario_asignado String?   @db.VarChar(15)
+  tick_fecha_asignacion DateTime? @db.DateTime(0)
   usua_cedula           String?   @db.VarChar(15)
-  proy_id               Int
-  fecha_sistema         DateTime? @db.Timestamp(0)
+  tipr_id               Int
+  tica_id               Int?
+  prio_id               Int?
+  tick_file_url         String?   @db.VarChar(255)
+  fecha_sistema         DateTime? @db.DateTime(0)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -47,25 +43,28 @@ model ticket_chat {
   usua_cedula   String?   @db.VarChar(15)
   tich_mensaje  String?   @db.Text
   tich_file_url String?   @db.VarChar(255)
-  fecha_sistema DateTime? @db.Timestamp(0)
+  fecha_sistema DateTime? @db.DateTime(0)
 }
 
 model ticket_historial {
-  tihi_id       Int       @id @default(autoincrement())
-  tick_id       Int
-  tihi_accion   String?   @db.VarChar(50)
-  usua_cedula   String?   @db.VarChar(15)
-  fecha_sistema DateTime? @db.Timestamp(0)
+  tihi_id          Int       @id @default(autoincrement())
+  tick_id          Int
+  tihi_accion      String?   @db.VarChar(50)
+  tihi_observacion String?   @db.Text
+  tihi_url_file    String?   @db.VarChar(255)
+  usua_cedula      String?   @db.VarChar(15)
+  fecha_sistema    DateTime? @db.Timestamp(0)
 }
 
 model ticket_identificador {
   tiid_id            Int       @id @default(autoincrement())
+  tipr_id            Int
   tiid_nombre        String?   @db.VarChar(255)
   tiid_descripcion   String?   @db.VarChar(255)
   tiid_tipo_dato     String?   @db.VarChar(50)
   tiid_min_lenght    Int?
   tiid_max_lenght    Int?
-  tiid_solo_letres   Boolean?  @default(false)
+  tiid_solo_letras   Boolean?  @default(false)
   tiid_alpha_numeric Boolean?  @default(true)
   tiid_regex         String?   @db.VarChar(255)
   fecha_sistema      DateTime? @db.Timestamp(0)
@@ -74,27 +73,71 @@ model ticket_identificador {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model ticket_usuarios {
   usua_cedula            String    @id @db.VarChar(11)
-  proy_id                Int?      @default(1) @db.UnsignedInt
   usua_password          String    @db.VarChar(60)
-  usua_nombres           String    @db.VarChar(30)
-  usua_apellidos         String    @db.VarChar(30)
+  usua_nombres           String    @db.VarChar(50)
+  usua_apellidos         String    @db.VarChar(50)
   usua_email             String    @db.VarChar(120)
   usua_celular           String    @db.VarChar(10)
   usua_fecha_nacimiento  DateTime? @db.Date
-  usua_activo            String    @db.Char(2)
+  usua_activo            String    @default("A") @db.Char(2)
   usua_sesion_token      String?   @db.VarChar(60)
   usua_origen            String?   @db.VarChar(10)
-  usua_cambio_password   DateTime  @db.Date
-  perf_id                Int       @db.UnsignedInt
-  ortr_id                String?   @db.VarChar(8)
-  dipo_id                String?   @db.VarChar(8)
+  usua_cambio_password   DateTime? @db.Date
+  perf_id                Int
+  tipr_id                Int?
+  usua_login             String    @default("No") @db.Char(2)
   usua_direccion         String?   @db.VarChar(120)
   usua_ip_ultimo_ingreso String?   @db.VarChar(20)
   usua_fecha_ingreso     DateTime? @db.DateTime(0)
   usua_fecha_sistema     DateTime  @db.DateTime(0)
-  usua_cedula_login      String?   @db.VarChar(11)
   usua_password_temp     String?   @db.VarChar(150)
   usua_fecha_recupe      DateTime? @db.DateTime(0)
 
   @@index([perf_id], map: "perf_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_categorias {
+  tica_id       Int       @id @default(autoincrement())
+  tica_nombre   String?   @db.VarChar(50)
+  tica_estado   String?   @db.Char(1)
+  fecha_sistema DateTime? @db.DateTime(0)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_prioridades {
+  prio_id       Int       @id @default(autoincrement())
+  prio_nombre   String?   @db.VarChar(50)
+  prio_estado   String?   @db.Char(1)
+  fecha_sistema DateTime? @db.DateTime(0)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_proyecto_usuario {
+  tipu_id       Int       @id @default(autoincrement())
+  tipr_id       Int
+  usua_cedula   String?   @db.VarChar(15)
+  tipr_estado   String?   @db.Char(1)
+  fecha_sistema DateTime? @db.DateTime(0)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_proyectos {
+  tipr_id       Int       @id @default(autoincrement())
+  tipr_nombre   String?   @db.VarChar(100)
+  tipr_token    String?   @db.VarChar(200)
+  fecha_sistema DateTime? @db.DateTime(0)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_notificaciones {
+  tino_id                  Int       @id @default(autoincrement())
+  tick_id                  Int
+  tino_tipo                String?   @db.Char(1)
+  tino_estado              String?   @default("E") @db.Char(1)
+  tino_mensaje             String?   @db.VarChar(100)
+  tick_usuario_asignado    String?   @db.VarChar(10)
+  usua_cedula              String?   @db.VarChar(10)
+  tino_fecha_actualizacion DateTime? @db.DateTime(0)
+  fecha_sistema            DateTime? @db.DateTime(0)
 }

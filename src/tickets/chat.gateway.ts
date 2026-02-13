@@ -4,6 +4,7 @@ import * as jwt from 'jsonwebtoken';
 import { Injectable, Logger } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'mi_secreto_super_seguro';
 
@@ -18,39 +19,41 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mi_secreto_super_seguro';
 @Injectable()
 export class ChatGateway implements OnGatewayInit {
   private readonly logger = new Logger(ChatGateway.name);
-  constructor(private ticketsService: TicketsService, private prisma: PrismaService) {}
+  private server: Server;
+  constructor(private ticketsService: TicketsService, private prisma: PrismaService, private notificationsService?: NotificationsService) {}
 
   afterInit(server: Server) {
-    // middleware to authenticate socket connections
+    this.server = server;
+    // middleware para autenticar conexiones de socket
     server.use((socket: any, next: any) => {
       (async () => {
         try {
           let token = (socket.handshake.auth && socket.handshake.auth.token) || (socket.handshake.query && socket.handshake.query.token);
           if (!token) return next(new Error('No auth token'));
           if (typeof token === 'string') {
-            // strip surrounding quotes if present
+            // eliminar comillas alrededor si existen
             token = token.replace(/^\"|\"$/g, '');
-            // strip Bearer prefix if provided
+            // eliminar prefijo 'Bearer ' si está presente
             if (token.startsWith('Bearer ')) token = token.slice(7);
           }
 
           try {
             const payload: any = jwt.verify(token, JWT_SECRET);
-            // attach minimal user info to socket.data for later handlers
+            // adjuntar información mínima del usuario en socket.data para handlers posteriores
             socket.data = socket.data || {};
             socket.data.user = {
               usua_cedula: payload.sub,
               usua_email: payload.usua_email ?? payload.email,
               perf_id: payload.perf_id,
-              proy_id: payload.proy_id,
+              tipr_id: payload.tipr_id,
             };
             return next();
           } catch (e) {
-            // if JWT verification failed, try project token lookup in DB
-            const project = await this.prisma.proyectos.findFirst({ where: { proy_token: String(token) } });
+            // si la verificación JWT falló, intentar buscar token de proyecto en la BD
+                  const project = await this.prisma.ticket_proyectos.findFirst({ where: { tipr_token: String(token) } });
             if (project) {
               socket.data = socket.data || {};
-              socket.data.user = { proy_id: project.proy_id, project_token: true };
+                    socket.data.user = { tipr_id: project.tipr_id, project_token: true };
               return next();
             }
             this.logger.warn('Socket auth failed: ' + (e && (e as any).message ? (e as any).message : String(e)));
@@ -68,33 +71,36 @@ export class ChatGateway implements OnGatewayInit {
   }
 
   @SubscribeMessage('join_ticket')
-  async handleJoin(@MessageBody() payload: { tick_id: number }, @ConnectedSocket() client: Socket) {
-    const room = `ticket_${payload.tick_id}`;
+  async handleJoin(@MessageBody() payload: any, @ConnectedSocket() client: Socket) {
+    // soportar tanto `tick_id` como `ticket_id` según el cliente
+    const tickId = Number(payload?.tick_id ?? payload?.ticket_id ?? payload?.id);
+    if (!tickId || isNaN(tickId)) return { status: 'error', message: 'tick_id inválido' };
+    const room = `ticket_${tickId}`;
     try {
-      const ticket = await this.ticketsService.findOne(payload.tick_id);
+  const ticket = await this.ticketsService.findOne(tickId);
       const user = (client as any).data?.user;
       if (!ticket) return { status: 'error', message: 'Ticket no existe' };
-      // Chat only allowed when ticket has been assigned
+      // El chat sólo está permitido cuando el ticket ha sido asignado
       if (!ticket.tick_usuario_asignado) return { status: 'forbidden', reason: 'ticket_not_assigned' };
       const allowed =
-        // admin (perf_id=2) or creator or assigned user
+        // administrador (perf_id=2) o creador o usuario asignado
         user?.perf_id === 2 ||
         ticket.usua_cedula === user?.usua_cedula ||
         ticket.tick_usuario_asignado === user?.usua_cedula;
       if (!allowed) return { status: 'forbidden', reason: 'not_allowed' };
       client.join(room);
-      // fetch chat history and include it in the join response
+      // obtener historial de chat e incluirlo en la respuesta de unión
       try {
-        const messages = await this.ticketsService.getChatMessages(payload.tick_id);
-        return { status: 'joined', tick_id: payload.tick_id, messages };
+  const messages = await this.ticketsService.getChatMessages(tickId);
+  return { status: 'joined', tick_id: tickId, messages };
       } catch (err) {
-        // if messages can't be loaded, still allow join but inform client
-        this.logger.warn('Could not load chat history for ticket ' + payload.tick_id + ': ' + (err as any).message);
+        // si no se pueden cargar los mensajes, permitir unión pero informar al cliente
+        this.logger.warn('No se pudo cargar el historial de chat para el ticket ' + payload.tick_id + ': ' + (err as any).message);
         return { status: 'joined', tick_id: payload.tick_id, messages: [] };
       }
     } catch (err) {
       this.logger.error('join_ticket error', err as any);
-      // If the service threw a NotFoundException, include that reason; otherwise include generic message
+      // Si el servicio lanzó NotFoundException, incluir esa razón; si no, usar mensaje genérico
       const reason = err && (err.message || (err.response && err.response.message)) ? (err.message || err.response.message) : 'internal_error';
       return { status: 'error', reason };
     }
@@ -102,11 +108,13 @@ export class ChatGateway implements OnGatewayInit {
 
   @SubscribeMessage('message')
   async handleMessage(@MessageBody() payload: any, @ConnectedSocket() client: Socket) {
-    const room = `ticket_${payload.tick_id}`;
-  const user = (client as any).data?.user;
+    const tickId = Number(payload?.tick_id ?? payload?.ticket_id ?? payload?.id);
+    if (!tickId || isNaN(tickId)) return { status: 'error', message: 'tick_id inválido' };
+    const room = `ticket_${tickId}`;
+    const user = (client as any).data?.user;
     try {
-      const saved = await this.ticketsService.persistChatMessage(payload.tick_id, String(user?.usua_cedula ?? '0'), payload.message, payload.fileUrl);
-      // normalize output using DB field names from Prisma models
+      const saved = await this.ticketsService.persistChatMessage(tickId, String(user?.usua_cedula ?? '0'), payload.message, payload.fileUrl);
+      // normalizar salida usando nombres de campos de los modelos Prisma
       const out = {
         tich_id: (saved as any).tich_id ?? (saved as any).id,
         tick_id: (saved as any).tick_id,
@@ -116,6 +124,53 @@ export class ChatGateway implements OnGatewayInit {
         fecha_sistema: (saved as any).fecha_sistema ?? (saved as any).createdAt,
       };
       client.to(room).emit('message', out);
+
+      // determinar presencia en la sala y crear notificaciones para usuarios que no estén conectados al chat
+      try {
+        const members = this.server?.sockets?.adapter?.rooms?.get(room) || new Set();
+        const isUserInRoom = (cedula: string) => {
+          try {
+            if (!cedula) return false;
+            for (const sid of Array.from(members)) {
+              const s = this.server.sockets.sockets.get(sid as any);
+              if (!s) continue;
+              const sockUser = (s as any).data?.user?.usua_cedula || (s as any).data?.user?.sub;
+              if (sockUser && String(sockUser) === String(cedula)) return true;
+            }
+          } catch (e) {
+            // ignorar
+          }
+          return false;
+        };
+
+  const ticketRec = await this.prisma.ticket.findUnique({ where: { tick_id: tickId } });
+        const assigned = ticketRec?.tick_usuario_asignado;
+        const creator = ticketRec?.usua_cedula;
+        const sender = String(user?.usua_cedula ?? '');
+        const snippet = (payload.message || '').slice(0, 140);
+        const msg = snippet ? `Nuevo mensaje en el ticket #${tickId}: "${snippet}"` : `Nuevo mensaje en el ticket #${tickId}`;
+
+        // notificar al usuario asignado si no está en el chat y no es el remitente
+        if (assigned && String(assigned) !== sender && !isUserInRoom(assigned)) {
+          try {
+            if (this.notificationsService) await this.notificationsService.createNotification({ tick_id: tickId, tino_tipo: 'C', tino_mensaje: msg, tick_usuario_asignado: String(assigned) });
+          } catch (e) {
+            this.logger.warn('Failed to create assigned-user notification: ' + String(e));
+          }
+        }
+
+        // notificar al creador del ticket si no está en el chat y no es el remitente
+        if (creator && String(creator) !== sender && !isUserInRoom(creator)) {
+          try {
+            if (this.notificationsService) await this.notificationsService.createNotification({ tick_id: tickId, tino_tipo: 'C', tino_mensaje: msg, usua_cedula: String(creator) });
+          } catch (e) {
+            this.logger.warn('Failed to create creator notification: ' + String(e));
+          }
+        }
+      } catch (e) {
+        this.logger.warn('Error while evaluating/creating chat notifications: ' + String(e));
+      }
+
       return { status: 'ok', message: out };
     } catch (err) {
       this.logger.error('message handler error', err as any);

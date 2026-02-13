@@ -15,6 +15,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     // Return the user's usua_cedula (primary key) so request.user.usua_cedula is available
-    return { usua_cedula: payload.sub, usua_email: payload.usua_email, perf_id: payload.perf_id, proy_id: payload.proy_id };
+    return { usua_cedula: payload.sub, usua_email: payload.usua_email, perf_id: payload.perf_id};
   }
 }

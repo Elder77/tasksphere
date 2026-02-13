@@ -85,7 +85,7 @@ describe('Tickets (e2e)', () => {
 
   it('can persist a chat message in DB', async () => {
     // create ticket directly
-  const t = await prisma.ticket.create({ data: { tick_nombre: 'Chat ticket', tick_descripcion: 'x', tick_id_identificador: 1, tick_modulo: 'M', usua_cedula: usua_cedula, proy_id: 1 } });
+  const t = await prisma.ticket.create({ data: { tick_nombre: 'Chat ticket', tick_descripcion: 'x', tick_id_identificador: 1, tick_modulo: 'M', usua_cedula: usua_cedula, tipr_id: 1 } });
     // WebSocket flow: connect with JWT, join room, send message and verify persisted
   const port = (app as any).__testPort || 3000;
   const socketUrl = `http://localhost:${port}/ws/tickets`;
@@ -139,7 +139,7 @@ describe('Tickets (e2e)', () => {
 
   it('closing unassigned ticket should return 400', async () => {
     // create a ticket (unassigned)
-    const t = await prisma.ticket.create({ data: { tick_nombre: 'To close', tick_descripcion: 'x', tick_id_identificador: 1, tick_modulo: 'M', usua_cedula: usua_cedula, proy_id: 1 } });
+    const t = await prisma.ticket.create({ data: { tick_nombre: 'To close', tick_descripcion: 'x', tick_id_identificador: 1, tick_modulo: 'M', usua_cedula: usua_cedula, tipr_id: 1 } });
 
     const resClose = await request(app.getHttpServer())
       .post(`/tickets/${t.tick_id}/close`)

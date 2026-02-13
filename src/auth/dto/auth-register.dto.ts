@@ -8,10 +8,25 @@ export class AuthRegisterDto {
   @IsNotEmpty()
   usua_nombres: string;
 
+  @ApiProperty({ example: 'newuser' })
+  @IsString()
+  @IsNotEmpty()
+  usua_apellidos: string;
+
   @ApiProperty({ example: '01020304050' })
   @IsString()
   @IsNotEmpty()
   usua_cedula: string;
+
+  @ApiProperty({ example: 'correo@correo.com' })
+  @IsString()
+  @IsNotEmpty()
+  usua_email: string;
+
+  @ApiProperty({ example: '3333333333', description: 'Número de celular del usuario' })
+  @IsString()
+  @IsNotEmpty()
+  usua_celular: string;
 
   @ApiProperty({ example: '123456' })
   @IsString()

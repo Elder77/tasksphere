@@ -15,7 +15,7 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'Usuario registrado' })
   register(@Body() body: AuthRegisterDto) {
     const perf = Number(body.perf_id ?? 1);
-    return this.authService.register(body.usua_cedula, body.usua_nombres, body.usua_password, perf);
+    return this.authService.register(body.usua_cedula, body.usua_nombres, body.usua_apellidos, body.usua_email, body.usua_celular, body.usua_password, perf);
   }
 
   @Post('login')

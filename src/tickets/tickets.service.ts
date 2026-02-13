@@ -1,10 +1,11 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { join, extname } from 'path';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { randomUUID } from 'crypto';
 
-export interface AuthUser { usua_cedula?: string; perf_id?: number; proy_id?: number }
+export interface AuthUser { usua_cedula?: string; perf_id?: number; tipr_id?: number }
 
 const ALLOWED_MIMES = new Set([
   'image/png',
@@ -21,23 +22,23 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
 
 @Injectable()
 export class TicketsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private notificationsService?: NotificationsService) {}
 
   private validateIdentifierValue(identifier: any, value: any) {
-    if (value === null || value === undefined) return; // nothing to validate here
+    if (value === null || value === undefined) return; // nada que validar aquí
     const v = String(value);
     const tipo = (identifier?.tiid_tipo_dato || 'string').toLowerCase();
 
-    // helper length checks (if provided)
+    // validaciones de longitud (si están provistas)
   const minL = identifier?.tiid_min_lenght;
   const maxL = identifier?.tiid_max_lenght;
-  // treat null/undefined/0 as "not set"
+  // tratar null/undefined/0 como "no establecido"
   if (minL != null && Number(minL) > 0 && v.length < Number(minL)) throw new BadRequestException(`Valor muy corto (min ${minL})`);
   if (maxL != null && Number(maxL) > 0 && v.length > Number(maxL)) throw new BadRequestException(`Valor muy largo (max ${maxL})`);
 
     // type-specific checks
     if (tipo === 'string') {
-      if (identifier?.tiid_solo_letres) {
+      if (identifier?.tiid_solo_letras) {
         if (!/^[A-Za-z\s]+$/.test(v)) throw new BadRequestException('Solo se permiten letras en este identificador');
       } else if (identifier?.tiid_alpha_numeric) {
         if (!/^[A-Za-z0-9\s]+$/.test(v)) throw new BadRequestException('Sólo se permiten letras y números en este identificador');
@@ -47,7 +48,7 @@ export class TicketsService {
           const re = new RegExp(identifier.tiid_regex);
           if (!re.test(v)) throw new BadRequestException('Valor no cumple la expresión regular del identificador');
         } catch (e) {
-          // invalid regex in database -> ignore or throw depending on policy
+          // regex inválida en la BD -> ignorar o lanzar según la política
           throw new BadRequestException('Expresión regular del identificador inválida');
         }
       }
@@ -63,13 +64,38 @@ export class TicketsService {
     }
   }
 
+  /**
+   * Añade archivos a un ticket existente (upload separada).
+   * Devuelve los metadatos guardados (filename, originalName, path, mime, size)
+   */
+  async addFilesToTicket(id: number, files: Express.Multer.File[], authUser?: AuthUser) {
+    const ticket = await this.prisma.ticket.findUnique({ where: { tick_id: id } });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    if (!files || !files.length) return [];
+    const saved = this.saveFilesToDisk(id, files, authUser?.usua_cedula ?? '0');
+    const created: any[] = [];
+    for (const s of saved) {
+      const rec = await this.prisma.ticked_file.create({ data: {
+        tick_id: id,
+        tifi_filename: s.filename,
+        tifi_url: s.path,
+        tifi_mime: s.mime,
+        tifi_size: s.size,
+        fecha_sistema: new Date(),
+      }});
+      created.push(rec);
+    }
+    await this.prisma.ticket_historial.create({ data: { tick_id: id, tihi_accion: 'FILES_ADDED', usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
+    return created;
+  }
+
   async findAll(query: any, authUser?: AuthUser) {
-    // pagination
+    // paginación
     const page = Number(query.page) > 0 ? Number(query.page) : 1;
     const perPage = Number(query.perPage) > 0 ? Math.min(Number(query.perPage), 100) : 10;
 
   const where: any = {};
-    // map query params to DB column names
+    // mapear parámetros de consulta a nombres de columnas en la BD
     if (query.status) where.tick_estado = query.status;
     if (query.module) where.tick_modulo = query.module;
     if (query.search) {
@@ -79,9 +105,15 @@ export class TicketsService {
       ];
     }
 
-    // If caller is project-scoped (project token) or a non-admin user with proy_id, restrict to that proy_id
-    if (authUser?.proy_id && authUser?.perf_id !== 2) {
-      where.proy_id = Number(authUser.proy_id);
+    // Si el solicitante está acotado por proyecto (token de proyecto) o es un usuario no-admin con tipr_id, restringir a ese tipr_id
+    if (authUser?.tipr_id && authUser?.perf_id !== 2) {
+      // authUser.tipr_id se mantiene por compatibilidad, pero contiene el valor tipr_id
+      where.tipr_id = Number(authUser.tipr_id);
+    }
+
+    // Si el solicitante pidió solo sus tickets (mine=true o mine=1)
+    if (query && (query.mine === '1' || query.mine === 'true') && authUser?.usua_cedula) {
+      where.usua_cedula = String(authUser.usua_cedula);
     }
 
     const [total, data] = await Promise.all([
@@ -98,7 +130,10 @@ export class TicketsService {
 
     const files = await this.prisma.ticked_file.findMany({ where: { tick_id: id } });
     const history = await this.prisma.ticket_historial.findMany({ where: { tick_id: id }, orderBy: { fecha_sistema: 'asc' } });
-    return { ...ticket, files, history };
+    // también incluir el nombre del identificador para conveniencia (tiid_nombre)
+    const identifier = await this.prisma.ticket_identificador.findUnique({ where: { tiid_id: ticket.tick_id_identificador } });
+    const tiid_nombre = identifier?.tiid_nombre ?? null;
+    return { ...ticket, files, history, tiid_nombre };
   }
 
   private saveFilesToDisk(tick_id: number, files: Express.Multer.File[], uploadedBy: number | string) {
@@ -127,7 +162,7 @@ export class TicketsService {
     const identifier = await this.prisma.ticket_identificador.findUnique({ where: { tiid_id: tiid_id } });
     if (!identifier) throw new BadRequestException('Identificador no existe');
 
-    // validate tick_nombre according to identifier rules
+    // validar tick_nombre según las reglas del identificador
     const ticketName = createDto.tick_nombre ?? createDto.title ?? null;
     this.validateIdentifierValue(identifier, ticketName);
 
@@ -137,8 +172,8 @@ export class TicketsService {
       tick_id_identificador: tiid_id,
       tick_modulo: createDto.tick_modulo ?? createDto.module ?? null,
       usua_cedula: String(authUser?.usua_cedula ?? createDto.usua_cedula ?? '0'),
-      // If authUser provides proy_id (either from JWT or from project token), prefer it. Otherwise fallback to provided createDto or 1
-      proy_id: Number(authUser?.proy_id ?? createDto.proy_id ?? 1),
+      // Si authUser proporciona tipr_id (se mantiene por compatibilidad) preferirlo; almacenar en la columna tipr_id
+      tipr_id: Number(authUser?.tipr_id ?? createDto.tipr_id ?? 1),
     }});
 
     if (files && files.length) {
@@ -155,7 +190,7 @@ export class TicketsService {
       }
     }
 
-  await this.prisma.ticket_historial.create({ data: { tick_id: ticket.tick_id, tihi_accion: 'CREATED', usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
+  await this.prisma.ticket_historial.create({ data: { tick_id: ticket.tick_id, tihi_accion: 'CREADO', usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
 
     return ticket;
   }
@@ -164,7 +199,7 @@ export class TicketsService {
     const ticket = await this.prisma.ticket.findUnique({ where: { tick_id: id } });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
 
-    // if the name is being updated, validate it against the identifier rules
+    // si se está actualizando el nombre, validarlo contra las reglas del identificador
     if (updateDto.tick_nombre) {
       const identifier = await this.prisma.ticket_identificador.findUnique({ where: { tiid_id: ticket.tick_id_identificador } });
       if (identifier) this.validateIdentifierValue(identifier, updateDto.tick_nombre);
@@ -191,30 +226,44 @@ export class TicketsService {
     return updated;
   }
 
-  async assign(id: number, assignedToId: number | string, authUser?: AuthUser) {
+  async assign(id: number, assignedToId: number | string, tica_id?: number | null, prio_id?: number | null, authUser?: AuthUser) {
   if (authUser?.perf_id !== 2) throw new ForbiddenException('Solo admin (perf_id=2) puede asignar');
-    // verify assigned user exists and is admin (perf_id === 2)
+    // verificar que el usuario asignado exista y sea administrador (perf_id === 2)
   const assignedUser = await this.prisma.ticket_usuarios.findUnique({ where: { usua_cedula: String(assignedToId) } });
     if (!assignedUser) throw new NotFoundException('Usuario asignado no existe');
     if (Number(assignedUser.perf_id) !== 2) throw new BadRequestException('El usuario asignado debe ser un administrador (perf_id=2)');
 
-    const ticket = await this.prisma.ticket.update({ where: { tick_id: id }, data: { tick_usuario_asignado: String(assignedToId) } });
-    await this.prisma.ticket_historial.create({ data: { tick_id: id, tihi_accion: 'ASSIGNED', usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
+    const updateData: any = { tick_usuario_asignado: String(assignedToId) };
+    if (tica_id != null) updateData.tica_id = Number(tica_id);
+    if (prio_id != null) updateData.prio_id = Number(prio_id);
+    const ticket = await this.prisma.ticket.update({ where: { tick_id: id }, data: updateData });
+    // registrar detalles del usuario asignado (cédula - nombres) en tihi_observacion para trazabilidad
+    const assignedLabel = `${assignedUser.usua_cedula}${assignedUser.usua_nombres ? ' - ' + assignedUser.usua_nombres : ''}`;
+    await this.prisma.ticket_historial.create({ data: { tick_id: id, tihi_accion: 'ASIGNADO', tihi_observacion: assignedLabel, usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
+    // crear una notificación para el usuario asignado
+    try {
+  const message = `Se te asignó el ticket #${ticket.tick_id}${ticket.tick_nombre ? `: ${ticket.tick_nombre}` : ''}`;
+  if (this.notificationsService) await this.notificationsService.createNotification({ tick_id: ticket.tick_id, tino_tipo: 'T', tino_mensaje: message, tick_usuario_asignado: String(assignedUser.usua_cedula) });
+    } catch (e) {
+      // no fallar la asignación si no se puede crear la notificación
+      console.warn('Failed to create notification for assignment', e);
+    }
     return ticket;
   }
 
   async close(id: number, note: string, files: Express.Multer.File[], authUser?: AuthUser) {
   if (authUser?.perf_id !== 2) throw new ForbiddenException('Solo admin (perf_id=2) puede cerrar');
-    // ensure ticket is assigned before closing
+    // asegurar que el ticket esté asignado antes de cerrarlo
     const ticket = await this.prisma.ticket.findUnique({ where: { tick_id: id } });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
     if (!ticket.tick_usuario_asignado) throw new BadRequestException('El ticket debe estar asignado antes de cerrarlo');
 
     const updated = await this.prisma.ticket.update({ where: { tick_id: id }, data: { tick_estado: 'C' } });
 
+  let savedFiles: any[] = [];
     if (files && files.length) {
-      const saved = this.saveFilesToDisk(id, files, authUser?.usua_cedula ?? '0');
-      for (const s of saved) {
+      savedFiles = this.saveFilesToDisk(id, files, authUser?.usua_cedula ?? '0');
+      for (const s of savedFiles) {
         await this.prisma.ticked_file.create({ data: {
           tick_id: id,
           tifi_filename: s.filename,
@@ -225,7 +274,9 @@ export class TicketsService {
         }});
       }
     }
-    await this.prisma.ticket_historial.create({ data: { tick_id: id, tihi_accion: 'CLOSED', usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
+    // registrar historial; si se guardaron archivos, incluir la ruta del primer archivo en tihi_url_file
+  const firstFilePath = savedFiles.length ? `/tickets/${id}/files/${encodeURIComponent(String(savedFiles[0].filename))}` : null;
+  await this.prisma.ticket_historial.create({ data: { tick_id: id, tihi_accion: 'CERRADO', tihi_observacion: note ?? null, tihi_url_file: firstFilePath ?? null, usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
     return updated;
   }
 
@@ -234,11 +285,12 @@ export class TicketsService {
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
   if (ticket.usua_cedula !== String(authUser?.usua_cedula ?? '')) throw new ForbiddenException('Solo el creador puede reabrir');
 
-    const updated = await this.prisma.ticket.update({ where: { tick_id: id }, data: { tick_estado: 'R' } });
+    const updated = await this.prisma.ticket.update({ where: { tick_id: id }, data: { tick_estado: 'P' } });
 
+  let savedFiles: any[] = [];
     if (files && files.length) {
-      const saved = this.saveFilesToDisk(id, files, authUser?.usua_cedula ?? '0');
-      for (const s of saved) {
+      savedFiles = this.saveFilesToDisk(id, files, authUser?.usua_cedula ?? '0');
+      for (const s of savedFiles) {
         await this.prisma.ticked_file.create({ data: {
           tick_id: id,
           tifi_filename: s.filename,
@@ -249,35 +301,49 @@ export class TicketsService {
         }});
       }
     }
-
-  await this.prisma.ticket_historial.create({ data: { tick_id: id, tihi_accion: 'REOPENED', usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
+  const firstFilePath = savedFiles.length ? `/tickets/${id}/files/${encodeURIComponent(String(savedFiles[0].filename))}` : null;
+  await this.prisma.ticket_historial.create({ data: { tick_id: id, tihi_accion: 'REABIERTO', tihi_observacion: reason ?? null, tihi_url_file: firstFilePath ?? null, usua_cedula: String(authUser?.usua_cedula ?? '0'), fecha_sistema: new Date() } });
     return updated;
   }
 
-  // Persist chat messages coming from the gateway
+  /**
+   * Devuelve el historial (ticket_historial) de un ticket
+   */
+  async getHistory(tick_id: number) {
+    const ticket = await this.prisma.ticket.findUnique({ where: { tick_id } });
+    if (!ticket) throw new NotFoundException('Ticket no encontrado');
+    return this.prisma.ticket_historial.findMany({ where: { tick_id }, orderBy: { fecha_sistema: 'asc' } });
+  }
+
+  // Persistir mensajes de chat provenientes del gateway
   async persistChatMessage(tick_id: number, usua_cedula: number | string, tich_mensaje?: string, tich_file_url?: string) {
-    // Ensure ticket exists to provide clearer errors to the gateway
+    // Asegurar que el ticket exista para devolver errores claros al gateway
     const ticket = await this.prisma.ticket.findUnique({ where: { tick_id: tick_id } });
     if (!ticket) {
-      // Throw a standard NotFoundException so callers can handle it
+      // Lanzar NotFoundException estándar para que los llamadores puedan manejarlo
       throw new NotFoundException('Ticket no encontrado');
     }
-    return this.prisma.ticket_chat.create({ data: { tick_id, usua_cedula: String(usua_cedula), tich_mensaje: tich_mensaje ?? '', tich_file_url: tich_file_url ?? null, fecha_sistema: new Date() } });
+    const rec = await this.prisma.ticket_chat.create({ data: { tick_id, usua_cedula: String(usua_cedula), tich_mensaje: tich_mensaje ?? '', tich_file_url: tich_file_url ?? null, fecha_sistema: new Date() } });
+    // La creación de notificaciones por mensajes de chat la gestiona ChatGateway
+    // (el gateway puede determinar qué sockets están presentes en la sala y si
+    // notificar al usuario asignado o al creador del ticket). Mantener sólo la persistencia aquí.
+    return rec;
   }
 
   /**
    * Devuelve el historial de mensajes de un ticket ordenado por fecha ascendente.
    */
   async getChatMessages(tick_id: number) {
-    // Ensure ticket exists
+    // Asegurar que el ticket exista
     const ticket = await this.prisma.ticket.findUnique({ where: { tick_id: tick_id } });
     if (!ticket) throw new NotFoundException('Ticket no encontrado');
     return this.prisma.ticket_chat.findMany({ where: { tick_id }, orderBy: { fecha_sistema: 'asc' } });
   }
 
-  // Find a project by its token (used to accept project-level tokens)
+  // Buscar un proyecto por su token (usado para aceptar tokens a nivel de proyecto)
   async findProjectByToken(token: string) {
     if (!token) return null;
-    return this.prisma.proyectos.findFirst({ where: { proy_token: token } });
+    // el nuevo nombre de modelo es ticket_proyectos con el campo tipr_token
+    return this.prisma.ticket_proyectos.findFirst({ where: { tipr_token: token } });
   }
 }

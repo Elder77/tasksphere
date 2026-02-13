@@ -13,6 +13,7 @@ async function main() {
     if (!exists) {
       await prisma.ticket_identificador.create({ data: {
         tiid_nombre: id.name,
+        tipr_id: 1,
         tiid_descripcion: id.description,
         tiid_tipo_dato: id.dataType,
         fecha_sistema: new Date(),
