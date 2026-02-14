@@ -36,6 +36,47 @@ export class NotificationsGateway
     );
   }
 
+  private isRecord(x: unknown): x is Record<string, unknown> {
+    return typeof x === 'object' && x !== null;
+  }
+
+  private getAllSockets(): Socket[] {
+    const socketsList: Socket[] = [];
+    try {
+      const serverAny: unknown = this.server as unknown;
+      if (!this.isRecord(serverAny)) return socketsList;
+
+      const serverRec = serverAny;
+      const container =
+        serverRec['sockets'] ?? serverRec['adapter'] ?? serverAny;
+
+      if (container instanceof Map) {
+        socketsList.push(
+          ...Array.from((container as Map<string, Socket>).values()),
+        );
+      } else if (Array.isArray(container)) {
+        socketsList.push(...(container as Socket[]));
+      } else if (this.isRecord(container)) {
+        const contRec = container;
+        const roomsVal = contRec['values'] ?? contRec['sockets'] ?? undefined;
+        if (roomsVal instanceof Map) {
+          socketsList.push(
+            ...Array.from((roomsVal as Map<string, Socket>).values()),
+          );
+        } else if (Array.isArray(roomsVal)) {
+          socketsList.push(...(roomsVal as unknown as Socket[]));
+        } else {
+          socketsList.push(...(Object.values(container) as Socket[]));
+        }
+      } else if (Array.isArray(serverAny)) {
+        socketsList.push(...(serverAny as unknown as Socket[]));
+      }
+    } catch {
+      // ignore
+    }
+    return socketsList;
+  }
+
   private extractErrorMessage(err: unknown): string | undefined {
     if (!err || typeof err !== 'object') return undefined;
     const e = err as Record<string, unknown>;
@@ -46,100 +87,150 @@ export class NotificationsGateway
   afterInit(server: Server) {
     this.server = server;
     // middleware to authenticate socket connections for notifications namespace
-    server.use((socket: Socket, next: (err?: Error) => void) => {
-      (async () => {
-        try {
-          const authPart = socket.handshake.auth;
-          const queryPart = socket.handshake.query;
-          let token: string | undefined;
-
-          if (authPart && typeof authPart === 'object' && 'token' in authPart) {
-            const t = (authPart as Record<string, unknown>).token;
-            if (typeof t === 'string') token = t;
-          }
-          if (
-            !token &&
-            queryPart &&
-            typeof queryPart === 'object' &&
-            'token' in queryPart
-          ) {
-            const t = (queryPart as Record<string, unknown>).token;
-            if (typeof t === 'string') token = t;
-          }
-
-          if (!token) return next(); // anonymous allowed
-
-          if (typeof token === 'string') {
-            token = token.replace(/^"|"$/g, '');
-            if (token.startsWith('Bearer ')) token = token.slice(7);
-          }
-
+    server.use(
+      (
+        socket: Socket & { data?: Record<string, unknown> },
+        next: (err?: Error) => void,
+      ) => {
+        void (async () => {
           try {
-            const raw = jwt.verify(token, this.jwtSecret) as unknown;
-            if (raw && typeof raw === 'object') {
-              const payload = raw as {
-                sub?: string;
-                usua_email?: string;
-                email?: string;
-                perf_id?: number;
-                tipr_id?: number;
-              };
-              socket.data = socket.data || {};
-              socket.data.user = {
-                usua_cedula: payload.sub,
-                usua_email: payload.usua_email ?? payload.email,
-                perf_id: payload.perf_id,
-                tipr_id: payload.tipr_id,
-              };
+            const authPart: unknown = socket.handshake.auth;
+            const queryPart: unknown = socket.handshake.query;
+            let token: string | undefined;
+
+            if (
+              authPart &&
+              typeof authPart === 'object' &&
+              'token' in authPart
+            ) {
+              const t = (authPart as Record<string, unknown>).token;
+              if (typeof t === 'string') token = t;
+            }
+            if (
+              !token &&
+              queryPart &&
+              typeof queryPart === 'object' &&
+              'token' in queryPart
+            ) {
+              const t = (queryPart as Record<string, unknown>).token;
+              if (typeof t === 'string') token = t;
+            }
+
+            if (!token) return next(); // anonymous allowed
+
+            if (typeof token === 'string') {
+              token = token.replace(/^"|"$/g, '');
+              if (token.startsWith('Bearer ')) token = token.slice(7);
+            }
+
+            try {
+              const raw = jwt.verify(token, this.jwtSecret) as unknown;
+              if (this.isRecord(raw)) {
+                const p = raw;
+                const sub = typeof p['sub'] === 'string' ? p['sub'] : undefined;
+                const email =
+                  typeof p['usua_email'] === 'string'
+                    ? p['usua_email']
+                    : typeof p['email'] === 'string'
+                      ? p['email']
+                      : undefined;
+                const perf =
+                  typeof p['perf_id'] === 'number' ? p['perf_id'] : undefined;
+                const tipr =
+                  typeof p['tipr_id'] === 'number' ? p['tipr_id'] : undefined;
+
+                const cedulaVal = sub;
+                const emailVal = email;
+                const perfVal = perf;
+                const tiprVal = tipr;
+
+                const maybeUser: Record<string, unknown> = {};
+                if (typeof cedulaVal === 'string')
+                  maybeUser['usua_cedula'] = cedulaVal;
+                if (typeof emailVal === 'string')
+                  maybeUser['usua_email'] = emailVal;
+                if (typeof perfVal === 'number') maybeUser['perf_id'] = perfVal;
+                if (typeof tiprVal === 'number') maybeUser['tipr_id'] = tiprVal;
+
+                if (this.isUserObject(maybeUser)) {
+                  const srec = socket as unknown as Record<string, unknown>;
+                  srec['data'] = srec['data'] ?? {};
+                  const sd = srec['data'] as Record<string, unknown>;
+                  if (typeof cedulaVal === 'string') {
+                    const v: string = String(cedulaVal);
+                    sd['usua_cedula'] = v;
+                  }
+                  if (typeof emailVal === 'string') {
+                    const v: string = String(emailVal);
+                    sd['usua_email'] = v;
+                  }
+                  if (typeof perfVal === 'number') {
+                    const v: number = Number(perfVal);
+                    sd['perf_id'] = v;
+                  }
+                  if (typeof tiprVal === 'number') {
+                    const v: number = Number(tiprVal);
+                    sd['tipr_id'] = v;
+                  }
+                  return next();
+                }
+              }
+            } catch (verifyErr: unknown) {
+              try {
+                const project = await this.prisma.ticket_proyectos.findFirst({
+                  where: { tipr_token: String(token) },
+                });
+                if (project) {
+                  const srec = socket as unknown as Record<string, unknown>;
+                  srec['data'] = srec['data'] ?? {};
+                  const sd = srec['data'] as Record<string, unknown>;
+                  sd['tipr_id'] = project.tipr_id;
+                  sd['project_token'] = true;
+                  return next();
+                }
+              } catch (dbErr: unknown) {
+                this.logger.debug(
+                  'Project token lookup failed: ' +
+                    String(this.extractErrorMessage(dbErr) ?? String(dbErr)),
+                );
+              }
+              this.logger.warn(
+                'Notifications socket auth failed for token: ' +
+                  String(
+                    this.extractErrorMessage(verifyErr) ?? String(verifyErr),
+                  ),
+              );
               return next();
             }
-          } catch (verifyErr) {
-            try {
-              const project = await this.prisma.ticket_proyectos.findFirst({
-                where: { tipr_token: String(token) },
-              });
-              if (project) {
-                socket.data = socket.data || {};
-                socket.data.user = {
-                  tipr_id: project.tipr_id,
-                  project_token: true,
-                };
-                return next();
-              }
-            } catch (dbErr) {
-              this.logger.debug(
-                'Project token lookup failed: ' + String(dbErr),
-              );
-            }
+          } catch (err: unknown) {
             this.logger.warn(
-              'Notifications socket auth failed for token: ' +
-                String(verifyErr),
+              'Notifications socket auth unexpected error: ' +
+                String(this.extractErrorMessage(err) ?? err),
             );
             return next();
           }
-        } catch (err) {
+        })().catch((err: unknown) => {
           this.logger.warn(
-            'Notifications socket auth unexpected error: ' + String(err),
+            'Notifications socket auth unexpected error: ' +
+              String(this.extractErrorMessage(err) ?? err),
           );
           return next();
-        }
-      })().catch((err) => {
-        this.logger.warn(
-          'Notifications socket auth unexpected error: ' + String(err),
-        );
-        return next();
-      });
-    });
+        });
+      },
+    );
   }
 
   handleConnection(client: Socket) {
     try {
-      const userObj: unknown = (client.data as unknown)?.user;
+      const dataRec = this.isRecord(
+        (client as unknown as Record<string, unknown>).data,
+      )
+        ? (client as unknown as Record<string, unknown>).data
+        : undefined;
       let u: string | undefined;
-      if (this.isUserObject(userObj)) {
-        const r = userObj as Record<string, unknown>;
-        const ced = r['usua_cedula'];
-        const sub = r['sub'];
+      if (dataRec) {
+        const ced: unknown = dataRec['usua_cedula'];
+        const sub: unknown = dataRec['sub'];
         u =
           typeof ced === 'string'
             ? ced
@@ -150,13 +241,11 @@ export class NotificationsGateway
       this.logger.debug(
         `[NotificationsGateway] client connected ${client.id} user=${u}`,
       );
-      if (u) {
-        // join a dedicated room per user to simplify targeted emits
-        client.join(`user_${String(u)}`);
-      }
-    } catch (e) {
+      if (u) client.join(`user_${String(u)}`);
+    } catch (e: unknown) {
       this.logger.warn(
-        '[NotificationsGateway] handleConnection error: ' + String(e),
+        '[NotificationsGateway] handleConnection error: ' +
+          String(this.extractErrorMessage(e) ?? String(e)),
       );
     }
   }
@@ -188,39 +277,16 @@ export class NotificationsGateway
         );
       }
 
-      // Fallback: gather sockets list robustly across socket.io versions / adapters
-      const socketsList: Socket[] = [];
-      const sContainer: unknown = (
-        this.server as unknown as { sockets?: unknown }
-      ).sockets;
-      if (!sContainer) {
-        this.logger.debug('No sockets container available on server');
-        return;
-      }
-
-      // v4: sContainer.sockets is a Map of Socket instances
-      if (sContainer.sockets) {
-        const s = sContainer.sockets;
-        if (typeof s.values === 'function') {
-          socketsList.push(...Array.from(s.values()));
-        } else if (Array.isArray(s)) {
-          socketsList.push(...s);
-        } else if (s instanceof Map) {
-          socketsList.push(...Array.from(s.values()));
-        } else if (typeof s === 'object') {
-          socketsList.push(...Object.values(s));
-        }
-      } else if (typeof sContainer.connected === 'object') {
-        // older socket.io versions
-        socketsList.push(...Object.values(sContainer.connected));
-      } else if (Array.isArray(sContainer)) {
-        socketsList.push(...sContainer);
-      }
-
+      const socketsList = this.getAllSockets();
       let matched = 0;
       for (const s of socketsList) {
         try {
-          const uObj: unknown = (s as Socket & { data?: unknown }).data?.user;
+          let sData: unknown = undefined;
+          if (this.isRecord(s))
+            sData = (s as unknown as Record<string, unknown>)['data'];
+          const uObj: unknown = this.isRecord(sData)
+            ? sData['user']
+            : undefined;
           if (this.isUserObject(uObj)) {
             const ru = uObj as Record<string, unknown>;
             const ced = ru['usua_cedula'];
@@ -241,8 +307,11 @@ export class NotificationsGateway
         }
       }
       this.logger.debug(`emitToUser fallback: matched sockets=${matched}`);
-    } catch (e) {
-      this.logger.warn('emitToUser failed: ' + String(e));
+    } catch (e: unknown) {
+      this.logger.warn(
+        'emitToUser failed: ' +
+          String(this.extractErrorMessage(e) ?? String(e)),
+      );
     }
   }
 

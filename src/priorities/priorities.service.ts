@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreatePrioridadDto } from './dto/create-prioridad.dto';
 import { UpdatePrioridadDto } from './dto/update-prioridad.dto';
 
@@ -8,10 +9,10 @@ export class TicketPrioridadesService {
   constructor(private prisma: PrismaService) {}
 
   findAll(q?: string) {
-    const where: Record<string, unknown> = {};
-    if (q && String(q).trim()) {
-      where.prio_nombre = { contains: String(q).trim(), mode: 'insensitive' };
-    }
+    const where: Prisma.ticket_prioridadesWhereInput =
+      q && String(q).trim()
+        ? { prio_nombre: { contains: String(q).trim() } }
+        : {};
     return this.prisma.ticket_prioridades.findMany({
       where,
       orderBy: { fecha_sistema: 'desc' },
@@ -21,13 +22,14 @@ export class TicketPrioridadesService {
   async findAllPaged(page = 1, perPage = 10, q?: string) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
-    const where: Record<string, unknown> = {};
-    if (q && String(q).trim())
-      where.prio_nombre = { contains: String(q).trim(), mode: 'insensitive' };
+    const where: Prisma.ticket_prioridadesWhereInput =
+      q && String(q).trim()
+        ? { prio_nombre: { contains: String(q).trim() } }
+        : {};
     const [total, data] = await Promise.all([
-      this.prisma.ticket_prioridades.count({ where: where as any }),
+      this.prisma.ticket_prioridades.count({ where }),
       this.prisma.ticket_prioridades.findMany({
-        where: where as any,
+        where,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { fecha_sistema: 'desc' },

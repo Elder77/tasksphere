@@ -116,7 +116,22 @@ export class TicketsController {
   @ApiResponse({ status: 404, description: 'Ticket no encontrado' })
   async findOne(@Req() req: unknown, @Param('id') id: string) {
     // Si el solicitante proporcionó un header Authorization que puede ser un token de proyecto, restringir la respuesta a ese tipr_id
-    const authHeader = req.headers?.authorization || null;
+    let authHeader: string | null = null;
+    if (typeof req === 'object' && req !== null) {
+      const r = req as Record<string, unknown>;
+      const headers = r['headers'];
+      if (headers && typeof headers === 'object') {
+        const h = headers as Record<string, unknown>;
+        const a = h['authorization'] ?? h['Authorization'];
+        if (typeof a === 'string') authHeader = a;
+        else if (
+          a !== undefined &&
+          a !== null &&
+          (typeof a === 'number' || typeof a === 'boolean')
+        )
+          authHeader = String(a);
+      }
+    }
     if (authHeader) {
       let token = String(authHeader);
       if (token.startsWith('Bearer ')) token = token.slice(7);
@@ -141,9 +156,8 @@ export class TicketsController {
     description: 'Devuelve el historial de mensajes del ticket.',
   })
   async getMessages(@Req() req: unknown, @Param('id') id: string) {
-    const user = this.extractAuthUser(req);
     // autorización: reutilizar findOne para validar existencia del ticket y el scope del proyecto
-    const ticket = await this.ticketsService.findOne(Number(id));
+    await this.ticketsService.findOne(Number(id));
     // se pueden añadir comprobaciones de permisos adicionales aquí si son necesarias
     const messages = await this.ticketsService.getChatMessages(Number(id));
     return { data: messages };

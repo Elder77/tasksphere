@@ -35,7 +35,11 @@ export class TicketsService {
 
   private validateIdentifierValue(identifier: unknown, value: unknown) {
     if (value === null || value === undefined) return; // nada que validar aquí
-    const v = String(value);
+    let v: string;
+    if (typeof value === 'string') v = value;
+    else if (typeof value === 'number' || typeof value === 'boolean')
+      v = String(value);
+    else v = JSON.stringify(value);
     const idObj = (identifier as Record<string, unknown>) || {};
     const tipo = (
       typeof idObj.tiid_tipo_dato === 'string' ? idObj.tiid_tipo_dato : 'string'
@@ -44,10 +48,12 @@ export class TicketsService {
     // validaciones de longitud (si están provistas)
     const minL = idObj.tiid_min_lenght;
     const maxL = idObj.tiid_max_lenght;
-    if (minL != null && Number(minL) > 0 && v.length < Number(minL))
-      throw new BadRequestException(`Valor muy corto (min ${String(minL)})`);
-    if (maxL != null && Number(maxL) > 0 && v.length > Number(maxL))
-      throw new BadRequestException(`Valor muy largo (max ${String(maxL)})`);
+    const minLNum = Number(minL);
+    const maxLNum = Number(maxL);
+    if (minL != null && minLNum > 0 && v.length < minLNum)
+      throw new BadRequestException(`Valor muy corto (min ${minLNum})`);
+    if (maxL != null && maxLNum > 0 && v.length > maxLNum)
+      throw new BadRequestException(`Valor muy largo (max ${maxLNum})`);
 
     // type-specific checks
     if (tipo === 'string') {

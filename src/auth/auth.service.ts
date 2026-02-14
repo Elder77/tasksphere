@@ -58,7 +58,7 @@ export class AuthService {
         usua_apellidos: usua_apellidos,
         usua_password: hashed,
         usua_email,
-        usua_celular: usua_celular || null,
+        usua_celular: String(usua_celular ?? ''),
         perf_id: perf_id,
         usua_activo: 'A',
         usua_cambio_password: new Date(),

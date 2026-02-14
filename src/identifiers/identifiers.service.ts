@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateIdentifierDto } from './dto/create-identifier.dto';
 
 @Injectable()
@@ -35,12 +36,13 @@ export class IdentifiersService {
   }
 
   async findAll(q?: string) {
-    const where: Record<string, unknown> =
-      q && String(q).trim()
-        ? { tiid_nombre: { contains: String(q).trim(), mode: 'insensitive' } }
-        : {};
     return this.prisma.ticket_identificador.findMany({
-      where: where as any,
+      where:
+        q && String(q).trim()
+          ? ({
+              tiid_nombre: { contains: String(q).trim() },
+            } as Prisma.ticket_identificadorWhereInput)
+          : ({} as Prisma.ticket_identificadorWhereInput),
       orderBy: { fecha_sistema: 'desc' },
     });
   }
@@ -48,14 +50,14 @@ export class IdentifiersService {
   async findAllPaged(page = 1, perPage = 10, q?: string) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
-    const where: Record<string, unknown> =
+    const where: Prisma.ticket_identificadorWhereInput =
       q && String(q).trim()
-        ? { tiid_nombre: { contains: String(q).trim(), mode: 'insensitive' } }
+        ? { tiid_nombre: { contains: String(q).trim() } }
         : {};
     const [total, data] = await Promise.all([
-      this.prisma.ticket_identificador.count({ where: where as any }),
+      this.prisma.ticket_identificador.count({ where }),
       this.prisma.ticket_identificador.findMany({
-        where: where as any,
+        where,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { fecha_sistema: 'desc' },
@@ -76,7 +78,7 @@ export class IdentifiersService {
   async update(tiid_id: number, dto: Partial<CreateIdentifierDto>) {
     return this.prisma.ticket_identificador.update({
       where: { tiid_id: tiid_id },
-      data: dto as any,
+      data: dto as Prisma.ticket_identificadorUpdateInput,
     });
   }
 

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';
 
@@ -8,12 +9,13 @@ export class TicketCategoriasService {
   constructor(private prisma: PrismaService) {}
 
   findAll(q?: string) {
-    const where: Record<string, unknown> =
-      q && String(q).trim()
-        ? { tica_nombre: { contains: String(q).trim(), mode: 'insensitive' } }
-        : {};
     return this.prisma.ticket_categorias.findMany({
-      where: where as any,
+      where:
+        q && String(q).trim()
+          ? ({
+              tica_nombre: { contains: String(q).trim() },
+            } as Prisma.ticket_categoriasWhereInput)
+          : ({} as Prisma.ticket_categoriasWhereInput),
       orderBy: { fecha_sistema: 'desc' },
     });
   }
@@ -21,14 +23,15 @@ export class TicketCategoriasService {
   async findAllPaged(page = 1, perPage = 10, q?: string) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
-    const where: Record<string, unknown> =
+
+    const where: Prisma.ticket_categoriasWhereInput =
       q && String(q).trim()
-        ? { tica_nombre: { contains: String(q).trim(), mode: 'insensitive' } }
+        ? { tica_nombre: { contains: String(q).trim() } }
         : {};
     const [total, data] = await Promise.all([
-      this.prisma.ticket_categorias.count({ where: where as any }),
+      this.prisma.ticket_categorias.count({ where }),
       this.prisma.ticket_categorias.findMany({
-        where: where as any,
+        where,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { fecha_sistema: 'desc' },

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateProyectoDto } from './dto/create-proyecto.dto';
 import { UpdateProyectoDto } from './dto/update-proyecto.dto';
 
@@ -8,17 +9,12 @@ export class TicketProyectosService {
   constructor(private prisma: PrismaService) {}
 
   findAll(q?: string) {
-    const where: Record<string, unknown> = {};
-    if (q && String(q).trim()) {
-      (
-        where as Record<string, unknown> & { tipr_nombre?: unknown }
-      ).tipr_nombre = {
-        contains: String(q).trim(),
-        mode: 'insensitive',
-      };
-    }
+    const where: Prisma.ticket_proyectosWhereInput =
+      q && String(q).trim()
+        ? { tipr_nombre: { contains: String(q).trim() } }
+        : {};
     return this.prisma.ticket_proyectos.findMany({
-      where: where as any,
+      where,
       orderBy: { fecha_sistema: 'desc' },
     });
   }
@@ -26,18 +22,14 @@ export class TicketProyectosService {
   async findAllPaged(page = 1, perPage = 10, q?: string) {
     const p = Number(page) > 0 ? Number(page) : 1;
     const pp = Number(perPage) > 0 ? Math.min(Number(perPage), 100) : 10;
-    const where: Record<string, unknown> = {};
-    if (q && String(q).trim())
-      (
-        where as Record<string, unknown> & { tipr_nombre?: unknown }
-      ).tipr_nombre = {
-        contains: String(q).trim(),
-        mode: 'insensitive',
-      };
+    const where: Prisma.ticket_proyectosWhereInput =
+      q && String(q).trim()
+        ? { tipr_nombre: { contains: String(q).trim() } }
+        : {};
     const [total, data] = await Promise.all([
-      this.prisma.ticket_proyectos.count({ where: where as any }),
+      this.prisma.ticket_proyectos.count({ where }),
       this.prisma.ticket_proyectos.findMany({
-        where: where as any,
+        where,
         skip: (p - 1) * pp,
         take: pp,
         orderBy: { fecha_sistema: 'desc' },

@@ -9,7 +9,7 @@ import { Socket, Server } from 'socket.io';
 import type { AuthUser } from '../types/auth';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '../config/config.service';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { TicketsService } from './tickets.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -40,11 +40,38 @@ export class ChatGateway implements OnGatewayInit {
   private isRecord(x: unknown): x is Record<string, unknown> {
     return typeof x === 'object' && x !== null;
   }
+  private getRoomMembers(room: string): Set<unknown> {
+    try {
+      const serverUnknown: unknown = this.server as unknown;
+      if (!this.isRecord(serverUnknown)) return new Set<unknown>();
+      const serverRec = serverUnknown;
+      const socketsContainer: unknown =
+        serverRec['sockets'] ?? serverRec['adapter'] ?? serverUnknown;
+
+      if (this.isRecord(socketsContainer)) {
+        const rooms: unknown = socketsContainer['rooms'];
+        if (rooms instanceof Map) {
+          const mapRooms = rooms as Map<unknown, unknown>;
+          const value: unknown = mapRooms.get(room);
+          if (value instanceof Set) return value as Set<unknown>;
+        }
+        // fallback: maybe rooms is a plain object with arrays
+        if (this.isRecord(rooms)) {
+          const maybe = rooms[room];
+          if (Array.isArray(maybe)) return new Set(maybe);
+        }
+      }
+
+      return new Set<unknown>();
+    } catch {
+      return new Set<unknown>();
+    }
+  }
   constructor(
     private ticketsService: TicketsService,
     private prisma: PrismaService,
-    private notificationsService: NotificationsService | undefined,
     private config: ConfigService,
+    @Optional() private notificationsService?: NotificationsService,
   ) {
     this.jwtSecret = this.config.getJwtSecret();
   }
@@ -53,10 +80,13 @@ export class ChatGateway implements OnGatewayInit {
     this.server = server;
     // middleware para autenticar conexiones de socket
     server.use((socket: Socket, next: (err?: Error) => void) => {
-      (async () => {
+      void (async () => {
         try {
-          const authPart: unknown = socket.handshake.auth;
-          const queryPart: unknown = socket.handshake.query;
+          const hs = socket.handshake as unknown as
+            | Record<string, unknown>
+            | undefined;
+          const authPart = hs ? hs['auth'] : undefined;
+          const queryPart = hs ? hs['query'] : undefined;
           let token: string | undefined;
 
           if (authPart && typeof authPart === 'object' && 'token' in authPart) {
@@ -82,42 +112,64 @@ export class ChatGateway implements OnGatewayInit {
           try {
             const raw = jwt.verify(token, this.jwtSecret) as unknown;
             if (raw && typeof raw === 'object') {
-              const payload = raw as {
-                sub?: string;
-                usua_email?: string;
-                email?: string;
-                perf_id?: number;
-                tipr_id?: number;
-              };
-              socket.data = socket.data || {};
-              socket.data.user = {
-                usua_cedula: payload.sub,
-                usua_email: payload.usua_email ?? payload.email,
-                perf_id: payload.perf_id,
-                tipr_id: payload.tipr_id,
-              } as AuthUser;
+              const p = raw as Record<string, unknown>;
+              const userCandidate: Record<string, unknown> = {};
+              const sub = typeof p['sub'] === 'string' ? p['sub'] : undefined;
+              const email =
+                typeof p['usua_email'] === 'string'
+                  ? p['usua_email']
+                  : typeof p['email'] === 'string'
+                    ? p['email']
+                    : undefined;
+              const perf =
+                typeof p['perf_id'] === 'number' ? p['perf_id'] : undefined;
+              const tipr =
+                typeof p['tipr_id'] === 'number' ? p['tipr_id'] : undefined;
+              if (sub) userCandidate['usua_cedula'] = sub;
+              if (email) userCandidate['usua_email'] = email;
+              if (perf !== undefined) userCandidate['perf_id'] = perf;
+              if (tipr !== undefined) userCandidate['tipr_id'] = tipr;
+              const srec = socket as unknown as Record<string, unknown>;
+              srec['data'] = srec['data'] ?? {};
+              const sd = srec['data'] as Record<string, unknown>;
+              if (typeof userCandidate['usua_cedula'] === 'string') {
+                const v: string = String(userCandidate['usua_cedula']);
+                sd['usua_cedula'] = v;
+              }
+              if (typeof userCandidate['usua_email'] === 'string') {
+                const v: string = String(userCandidate['usua_email']);
+                sd['usua_email'] = v;
+              }
+              if (typeof userCandidate['perf_id'] === 'number') {
+                const v: number = Number(userCandidate['perf_id']);
+                sd['perf_id'] = v;
+              }
+              if (typeof userCandidate['tipr_id'] === 'number') {
+                const v: number = Number(userCandidate['tipr_id']);
+                sd['tipr_id'] = v;
+              }
               return next();
             }
-          } catch (verifyErr) {
+          } catch (verifyErr: unknown) {
             const project = await this.prisma.ticket_proyectos.findFirst({
               where: { tipr_token: String(token) },
             });
             if (project) {
-              socket.data = socket.data || {};
-              socket.data.user = {
-                tipr_id: project.tipr_id,
-                project_token: true,
-              };
+              const srec = socket as unknown as Record<string, unknown>;
+              srec['data'] = srec['data'] ?? {};
+              const sd = srec['data'] as Record<string, unknown>;
+              sd['tipr_id'] = project.tipr_id;
+              sd['project_token'] = true;
               return next();
             }
             this.logger.warn('Socket auth failed: ' + String(verifyErr));
             return next(new Error('Token inválido'));
           }
-        } catch (err) {
+        } catch (err: unknown) {
           this.logger.warn('Socket auth failed: ' + String(err));
           return next(new Error('Token inválido'));
         }
-      })().catch((err) => {
+      })().catch((err: unknown) => {
         this.logger.warn('Socket auth unexpected error: ' + String(err));
         return next(new Error('Token inválido'));
       });
@@ -139,7 +191,7 @@ export class ChatGateway implements OnGatewayInit {
   async handleJoin(
     @MessageBody()
     payload: { tick_id?: number; ticket_id?: number; id?: number },
-    @ConnectedSocket() client: Socket & { data?: { user?: AuthUser } },
+    @ConnectedSocket() client: Socket & { data?: Record<string, unknown> },
   ) {
     // soportar tanto `tick_id` como `ticket_id` según el cliente
     const tickId = Number(
@@ -150,8 +202,8 @@ export class ChatGateway implements OnGatewayInit {
     const room = `ticket_${tickId}`;
     try {
       const ticket = await this.ticketsService.findOne(tickId);
-      const userObj: unknown = (client.data as unknown)?.user;
-      const user = this.isAuthUser(userObj) ? userObj : undefined;
+      const sd = client.data as Record<string, unknown> | undefined;
+      const user = sd && this.isAuthUser(sd) ? sd : undefined;
       if (!ticket) return { status: 'error', message: 'Ticket no existe' };
       // El chat sólo está permitido cuando el ticket ha sido asignado
       if (!ticket.tick_usuario_asignado)
@@ -177,7 +229,9 @@ export class ChatGateway implements OnGatewayInit {
         return { status: 'joined', tick_id: payload.tick_id, messages: [] };
       }
     } catch (err) {
-      this.logger.error('join_ticket error', err);
+      this.logger.error(
+        'join_ticket error: ' + (this.extractErrorMessage(err) ?? String(err)),
+      );
       const reason = this.extractErrorMessage(err) ?? 'internal_error';
       return { status: 'error', reason };
     }
@@ -193,7 +247,7 @@ export class ChatGateway implements OnGatewayInit {
       message?: string;
       fileUrl?: string;
     },
-    @ConnectedSocket() client: Socket & { data?: { user?: AuthUser } },
+    @ConnectedSocket() client: Socket & { data?: Record<string, unknown> },
   ) {
     const tickId = Number(
       payload?.tick_id ?? payload?.ticket_id ?? payload?.id,
@@ -201,12 +255,17 @@ export class ChatGateway implements OnGatewayInit {
     if (!tickId || isNaN(tickId))
       return { status: 'error', message: 'tick_id inválido' };
     const room = `ticket_${tickId}`;
-    const userObj: unknown = (client.data as unknown)?.user;
-    const user = this.isAuthUser(userObj) ? userObj : undefined;
+    const sd = client.data as Record<string, unknown> | undefined;
+    const user = sd && this.isAuthUser(sd) ? sd : undefined;
     try {
+      const normalizedSender =
+        typeof user?.usua_cedula === 'string' ||
+        typeof user?.usua_cedula === 'number'
+          ? String(user.usua_cedula)
+          : '0';
       const saved = await this.ticketsService.persistChatMessage(
         tickId,
-        String(user?.usua_cedula ?? '0'),
+        normalizedSender,
         payload.message,
         payload.fileUrl,
       );
@@ -234,32 +293,38 @@ export class ChatGateway implements OnGatewayInit {
 
       // determinar presencia en la sala y crear notificaciones para usuarios que no estén conectados al chat
       try {
-        const members =
-          ((
-            this.server?.sockets as unknown as {
-              adapter?: Record<string, unknown>;
-            }
-          )?.adapter?.rooms?.get(room) as Set<unknown> | undefined) ||
-          new Set<unknown>();
+        const members = this.getRoomMembers(room);
 
         const isUserInRoom = (cedula: string) => {
           try {
             if (!cedula) return false;
             for (const sid of Array.from(members)) {
               const sidStr = String(sid);
-              const s = (
-                this.server.sockets as unknown as {
-                  sockets?: Map<string, Socket>;
-                }
-              ).sockets?.get(sidStr);
+              const sContainer =
+                (this.server as unknown as Record<string, unknown>)?.sockets ??
+                (this.server as unknown);
+              if (!this.isRecord(sContainer)) continue;
+              const sc = sContainer;
+              let s: unknown = undefined;
+              if (sc instanceof Map)
+                s = (sc as Map<string, unknown>).get(sidStr);
+              else if (this.isRecord(sc) && sc['sockets'] instanceof Map)
+                s = (sc['sockets'] as Map<string, unknown>).get(sidStr);
+              else
+                s = this.isRecord(sc) ? (sc[sidStr] ?? undefined) : undefined;
               if (!s) continue;
-              const sockUser: unknown = (s as Socket & { data?: unknown }).data
-                ?.user;
+              const sockRec = s as unknown as { data?: { user?: unknown } };
+              const sockUser: unknown = sockRec.data
+                ? sockRec.data.user
+                : undefined;
               if (this.isRecord(sockUser)) {
                 const su = sockUser;
-                const candidate = su.usua_cedula ?? su.sub;
-                if (candidate && String(candidate) === String(cedula))
-                  return true;
+                const candidate = su['usua_cedula'] ?? su['sub'];
+                const candStr =
+                  typeof candidate === 'string' || typeof candidate === 'number'
+                    ? String(candidate)
+                    : undefined;
+                if (candStr && candStr === String(cedula)) return true;
               }
             }
           } catch {
@@ -273,12 +338,17 @@ export class ChatGateway implements OnGatewayInit {
         });
         const assigned = ticketRec?.tick_usuario_asignado;
         const creator = ticketRec?.usua_cedula;
-        const sender = String(user?.usua_cedula ?? '');
+        const sender =
+          typeof user?.usua_cedula === 'string' ||
+          typeof user?.usua_cedula === 'number'
+            ? String(user.usua_cedula)
+            : '';
         const snippet = (payload.message || '').slice(0, 140);
         const msg = snippet
           ? `Nuevo mensaje en el ticket #${tickId}: "${snippet}"`
           : `Nuevo mensaje en el ticket #${tickId}`;
 
+        // membersSet removed (unused)
         // notificar al usuario asignado si no está en el chat y no es el remitente
         if (
           assigned &&
@@ -320,19 +390,20 @@ export class ChatGateway implements OnGatewayInit {
             );
           }
         }
-      } catch (e) {
+      } catch (e: unknown) {
         this.logger.warn(
-          'Error while evaluating/creating chat notifications: ' + String(e),
+          'Error while evaluating/creating chat notifications: ' +
+            String(this.extractErrorMessage(e) ?? String(e)),
         );
       }
 
       return { status: 'ok', message: out };
-    } catch (err) {
-      this.logger.error('message handler error', err);
-      const reason =
-        err && (err.message || (err.response && err.response.message))
-          ? err.message || err.response.message
-          : 'internal_error';
+    } catch (err: unknown) {
+      this.logger.error(
+        'message handler error: ' +
+          (this.extractErrorMessage(err) ?? String(err)),
+      );
+      const reason = this.extractErrorMessage(err) ?? 'internal_error';
       return { status: 'error', reason };
     }
   }

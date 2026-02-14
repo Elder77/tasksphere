@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsString } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -23,6 +23,7 @@ export class CreateTicketDto {
 
   // Alias en inglés por compatibilidad con varios clientes
   @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
   title?: string;
 
@@ -33,6 +34,7 @@ export class CreateTicketDto {
 
   // Alias en inglés
   @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
   description?: string;
 
@@ -43,6 +45,7 @@ export class CreateTicketDto {
 
   // Alias en inglés
   @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
   module?: string;
 
@@ -50,6 +53,7 @@ export class CreateTicketDto {
     description:
       'Cédula del usuario creador (si no se proporciona se tomará del token)',
   })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   usua_cedula?: string;
