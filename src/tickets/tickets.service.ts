@@ -28,12 +28,19 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
 
 @Injectable()
 export class TicketsService {
+  // Servicio principal de tickets: creación, actualización, historial y archivos.
+  // Notas de seguridad/auditoría:
+  // - Todas las operaciones que mutan estado crean entradas en `ticket_historial`.
+  // - Las validaciones de identificadores se realizan en `validateIdentifierValue`.
+  // - Al guardar archivos, se validan tipo y tamaño y se registran metadatos.
   constructor(
     private prisma: PrismaService,
     private notificationsService?: NotificationsService,
   ) {}
 
   private validateIdentifierValue(identifier: unknown, value: unknown) {
+    // Validaciones del valor del identificador según su configuración. Lanza
+    // `BadRequestException` cuando no cumple las reglas.
     if (value === null || value === undefined) return; // nada que validar aquí
     let v: string;
     if (typeof value === 'string') v = value;

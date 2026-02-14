@@ -5,6 +5,10 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
+  // Servicio de notificaciones: persistencia y emisión en tiempo real.
+  // Seguridad / auditoría:
+  // - No se incluyen datos sensibles en los payloads emitidos por sockets.
+  // - Si la emisión en tiempo real falla, la creación en BD no debe revertirse.
   constructor(
     private prisma: PrismaService,
     private gateway?: NotificationsGateway,
@@ -36,7 +40,7 @@ export class NotificationsService {
       data: createData,
     });
 
-    // emit real-time notification to connected sockets if gateway available
+    // Emitir notificación en tiempo real a sockets conectados si el gateway está disponible
     try {
       if (this.gateway) {
         const tipo = String(rec.tino_tipo ?? '');
@@ -59,7 +63,7 @@ export class NotificationsService {
           });
       }
     } catch (e) {
-      // don't fail creation if realtime emit fails
+      // No fallar la creación si el envío en tiempo real falla
       console.warn('Failed to emit realtime notification', e);
     }
 
@@ -108,7 +112,7 @@ export class NotificationsService {
 
   async markAsRead(ids: number[] | number, usua_cedula: string) {
     const idsArr = Array.isArray(ids) ? ids : [ids];
-    // only update notifications that belong to the user (either as creator or assigned)
+    // Actualizar sólo las notificaciones que pertenecen al usuario (ya sea como creador o asignado)
     const res = await this.prisma.ticket_notificaciones.updateMany({
       where: {
         tino_id: { in: idsArr },

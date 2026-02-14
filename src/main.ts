@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { resolve } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -32,9 +32,11 @@ async function bootstrap() {
     SwaggerModule.setup('docs', app, document, {
       swaggerOptions: { persistAuthorization: true },
     });
-    console.log('[main] Swagger UI montado en /docs');
+    const logger = new Logger('Main');
+    logger.log('[main] Swagger UI montado en /docs');
   } catch (err) {
-    console.error('[main] Swagger setup failed:', String(err));
+    const logger = new Logger('Main');
+    logger.error('[main] Swagger setup failed: ' + String(err));
   }
   // Habilitar CORS para que el frontend (Next.js) pueda llamar al backend desde el navegador
   // En producción ajusta origin a los orígenes permitidos (ej: ['https://mi-frontend.com'])
@@ -45,6 +47,7 @@ async function bootstrap() {
   // Log the effective URL to help testing from LAN
   const displayHost = host === '0.0.0.0' ? '0.0.0.0 (all interfaces)' : host;
 
-  console.log(`[main] Listening on http://${displayHost}:${port}`);
+  const logger = new Logger('Main');
+  logger.log(`[main] Listening on http://${displayHost}:${port}`);
 }
 void bootstrap();

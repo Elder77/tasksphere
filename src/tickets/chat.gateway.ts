@@ -14,7 +14,7 @@ import { TicketsService } from './tickets.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
-// JWT secret will be read from ConfigService at runtime
+// El secreto JWT se obtiene desde ConfigService en tiempo de ejecución
 
 @WebSocketGateway({
   namespace: '/ws/tickets',
@@ -26,6 +26,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 })
 @Injectable()
 export class ChatGateway implements OnGatewayInit {
+  // Gateway WebSocket para el chat de tickets.
+  // Seguridad:
+  // - No guardamos objetos enteros del token en `socket.data` para evitar fuga de datos.
+  //   Sólo se almacenan campos escalares necesarios (`usua_cedula`, `perf_id`, `tipr_id`).
+  // - Las decisiones de autorización se realizan con checks explícitos y registros.
+  // - Evitar loggear tokens o credenciales completas; sólo mensajes y códigos de error.
   private readonly logger = new Logger(ChatGateway.name);
   private server: Server;
   private jwtSecret: string;
@@ -55,7 +61,7 @@ export class ChatGateway implements OnGatewayInit {
           const value: unknown = mapRooms.get(room);
           if (value instanceof Set) return value as Set<unknown>;
         }
-        // fallback: maybe rooms is a plain object with arrays
+        // alternativa: tal vez `rooms` es un objeto plano con arrays
         if (this.isRecord(rooms)) {
           const maybe = rooms[room];
           if (Array.isArray(maybe)) return new Set(maybe);
@@ -214,7 +220,7 @@ export class ChatGateway implements OnGatewayInit {
         ticket.usua_cedula === user?.usua_cedula ||
         ticket.tick_usuario_asignado === user?.usua_cedula;
       if (!allowed) return { status: 'forbidden', reason: 'not_allowed' };
-      client.join(room);
+      await client.join(room);
       // obtener historial de chat e incluirlo en la respuesta de unión
       try {
         const messages = await this.ticketsService.getChatMessages(tickId);
@@ -348,7 +354,7 @@ export class ChatGateway implements OnGatewayInit {
           ? `Nuevo mensaje en el ticket #${tickId}: "${snippet}"`
           : `Nuevo mensaje en el ticket #${tickId}`;
 
-        // membersSet removed (unused)
+        // membersSet eliminado (sin uso)
         // notificar al usuario asignado si no está en el chat y no es el remitente
         if (
           assigned &&

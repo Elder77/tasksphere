@@ -14,15 +14,15 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   async canActivate(context: ExecutionContext) {
-    // First try regular JWT authentication provided by passport
+    // Primero intentar la autenticación JWT regular proporcionada por passport
     try {
       const result = (await super.canActivate(context)) as boolean;
       if (result) return true;
     } catch {
-      // ignore and try project token fallback below
+      // ignorar error y probar la alternativa de token de proyecto abajo
     }
 
-    // Fallback: try to treat provided token as a project token stored in `proyectos.proy_token`.
+    // Alternativa: intentar tratar el token proporcionado como token de proyecto almacenado en `ticket_proyectos.tipr_token`.
     const req = context.switchToHttp().getRequest<Request>();
 
     // Accept token from several common locations to be more tolerant with clients / Swagger UI

@@ -16,6 +16,12 @@ import { ConfigService } from '../config/config.service';
 export class NotificationsGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
+  // Gateway para notificaciones en tiempo real.
+  // Seguridad / auditoría:
+  // - El middleware acepta conexiones anónimas pero marca sockets autenticados con
+  //   identificadores mínimos (ej. `usua_cedula`, `tipr_id`).
+  // - Nunca almacenar tokens en `socket.data` ni escribir datos sensibles en logs.
+  // - Emitir eventos por sala (`user_<cedula>`) cuando sea posible para eficiencia.
   private server: Server;
   private readonly logger = new Logger(NotificationsGateway.name);
   private jwtSecret: string;
@@ -72,7 +78,7 @@ export class NotificationsGateway
         socketsList.push(...(serverAny as unknown as Socket[]));
       }
     } catch {
-      // ignore
+      // ignorar
     }
     return socketsList;
   }
@@ -86,7 +92,7 @@ export class NotificationsGateway
 
   afterInit(server: Server) {
     this.server = server;
-    // middleware to authenticate socket connections for notifications namespace
+    // Middleware para autenticar conexiones de socket en el namespace de notificaciones
     server.use(
       (
         socket: Socket & { data?: Record<string, unknown> },
@@ -116,7 +122,7 @@ export class NotificationsGateway
               if (typeof t === 'string') token = t;
             }
 
-            if (!token) return next(); // anonymous allowed
+            if (!token) return next(); // permitir conexiones anónimas
 
             if (typeof token === 'string') {
               token = token.replace(/^"|"$/g, '');
@@ -204,14 +210,14 @@ export class NotificationsGateway
             }
           } catch (err: unknown) {
             this.logger.warn(
-              'Notifications socket auth unexpected error: ' +
+              'Error inesperado en autenticación de socket: ' +
                 String(this.extractErrorMessage(err) ?? err),
             );
             return next();
           }
         })().catch((err: unknown) => {
           this.logger.warn(
-            'Notifications socket auth unexpected error: ' +
+            'Error inesperado en autenticación de socket: ' +
               String(this.extractErrorMessage(err) ?? err),
           );
           return next();
@@ -241,7 +247,7 @@ export class NotificationsGateway
       this.logger.debug(
         `[NotificationsGateway] client connected ${client.id} user=${u}`,
       );
-      if (u) client.join(`user_${String(u)}`);
+      if (u) void client.join(`user_${String(u)}`);
     } catch (e: unknown) {
       this.logger.warn(
         '[NotificationsGateway] handleConnection error: ' +
@@ -256,21 +262,21 @@ export class NotificationsGateway
         `[NotificationsGateway] client disconnected ${client.id}`,
       );
     } catch {
-      // ignore
+      // ignorar
     }
   }
 
   emitToUser(usua_cedula: string, payload: unknown) {
     if (!this.server) return;
     try {
-      // Prefer room-based emit: each socket joins room `user_<cedula>` on connect
+      // Preferir envío por sala: cada socket se une a la sala `user_<cedula>` al conectarse
       try {
         const room = `user_${String(usua_cedula)}`;
         this.server.to(room).emit('notification', payload);
         this.logger.debug(`emitToUser: emitted to room ${room}`);
         return;
       } catch (e) {
-        // fallback to per-socket iteration if room emit fails
+        // Alternativa: iterar por sockets individuales si el envío por sala falla
         this.logger.debug(
           'emitToUser room emit failed, falling back to individual sockets: ' +
             String(e),
@@ -303,14 +309,13 @@ export class NotificationsGateway
             }
           }
         } catch {
-          // ignore per-socket errors
+          // ignorar errores por socket individual
         }
       }
       this.logger.debug(`emitToUser fallback: matched sockets=${matched}`);
     } catch (e: unknown) {
       this.logger.warn(
-        'emitToUser failed: ' +
-          String(this.extractErrorMessage(e) ?? String(e)),
+        'emitToUser falló: ' + String(this.extractErrorMessage(e) ?? String(e)),
       );
     }
   }

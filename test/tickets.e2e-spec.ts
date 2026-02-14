@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import type { Server as HttpServer } from 'http';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { PrismaClient } from '@prisma/client';
@@ -13,6 +14,7 @@ describe('Tickets (e2e)', () => {
   let usua_nombres: string;
   let adminJwt: string;
   let admin_cedula: string;
+  let testPort: number;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -21,42 +23,64 @@ describe('Tickets (e2e)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
     // Start HTTP server on ephemeral port so socket.io client can connect during tests
-    const server: any = app.getHttpServer();
-    await new Promise<void>((resolve) => server.listen(0, resolve));
-    const addr = server.address();
-    const port = addr && addr.port ? addr.port : 3000;
-    // store port on app for use in tests
-    (app as any).__testPort = port;
+    await app.listen(0);
+    const httpServer = app.getHttpServer() as HttpServer;
+    const addr = httpServer.address();
+    if (addr && typeof addr === 'object' && 'port' in addr) {
+      testPort = (addr as { port?: number }).port ?? 3000;
+    } else {
+      testPort = 3000;
+    }
 
     // register a fresh test user and login to get JWT
     usua_cedula = String(Date.now()).slice(-11);
     usua_nombres = `testuser_${Date.now()}`;
     const password = 'testpwd123';
-    await request(app.getHttpServer())
+    await request(app.getHttpServer() as unknown as HttpServer)
       .post('/auth/register')
       .send({ usua_cedula, usua_nombres, usua_password: password });
-    const res = await request(app.getHttpServer())
+    const res = await request(app.getHttpServer() as unknown as HttpServer)
       .post('/auth/login')
       .send({ usua_cedula, usua_password: password });
     expect(res.status).toBe(201);
-    jwt = res.body?.access_token;
+    {
+      const b: unknown = res.body;
+      const token =
+        typeof b === 'object' &&
+        b !== null &&
+        typeof (b as Record<string, unknown>)['access_token'] === 'string'
+          ? ((b as Record<string, unknown>)['access_token'] as string)
+          : undefined;
+      jwt = token ?? '';
+    }
     expect(jwt).toBeTruthy();
 
     // register an admin user and login
     admin_cedula = '00000000099';
     const adminName = `admin_${Date.now()}`;
     const adminPass = 'adminpwd123';
-    await request(app.getHttpServer()).post('/auth/register').send({
-      usua_cedula: admin_cedula,
-      usua_nombres: adminName,
-      usua_password: adminPass,
-      perf_id: 2,
-    });
-    const adminRes = await request(app.getHttpServer())
+    await request(app.getHttpServer() as unknown as HttpServer)
+      .post('/auth/register')
+      .send({
+        usua_cedula: admin_cedula,
+        usua_nombres: adminName,
+        usua_password: adminPass,
+        perf_id: 2,
+      });
+    const adminRes = await request(app.getHttpServer() as unknown as HttpServer)
       .post('/auth/login')
       .send({ usua_cedula: admin_cedula, usua_password: adminPass });
     expect(adminRes.status).toBe(201);
-    adminJwt = adminRes.body?.access_token;
+    {
+      const b: unknown = adminRes.body;
+      const token =
+        typeof b === 'object' &&
+        b !== null &&
+        typeof (b as Record<string, unknown>)['access_token'] === 'string'
+          ? ((b as Record<string, unknown>)['access_token'] as string)
+          : undefined;
+      adminJwt = token ?? '';
+    }
     expect(adminJwt).toBeTruthy();
   });
 
@@ -64,7 +88,7 @@ describe('Tickets (e2e)', () => {
     // Close Nest app and DB client. Increase timeout if needed.
     try {
       await app.close();
-    } catch (err) {
+    } catch {
       // ignore errors on close
     }
     await prisma.$disconnect();
@@ -78,7 +102,7 @@ describe('Tickets (e2e)', () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     const pdf = Buffer.from('%PDF-1.4');
 
-    const res = await request(app.getHttpServer())
+    const res = await request(app.getHttpServer() as unknown as HttpServer)
       .post('/tickets')
       .set('Authorization', `Bearer ${jwt}`)
       .field('tiid_id', identifier!.tiid_id)
@@ -91,7 +115,17 @@ describe('Tickets (e2e)', () => {
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('tick_id');
 
-    const tick_id = res.body.tick_id;
+    const tick_id = ((): unknown => {
+      const b: unknown = res.body;
+      if (
+        typeof b === 'object' &&
+        b !== null &&
+        'tick_id' in (b as Record<string, unknown>)
+      ) {
+        return (b as Record<string, unknown>)['tick_id'];
+      }
+      return undefined;
+    })();
     const files = await prisma.ticked_file.findMany({ where: { tick_id } });
     expect(files.length).toBeGreaterThanOrEqual(0);
   });
@@ -109,8 +143,7 @@ describe('Tickets (e2e)', () => {
       },
     });
     // WebSocket flow: connect with JWT, join room, send message and verify persisted
-    const port = (app as any).__testPort || 3000;
-    const socketUrl = `http://localhost:${port}/ws/tickets`;
+    const socketUrl = `http://localhost:${testPort}/ws/tickets`;
     const client: Socket = ioClient(socketUrl, {
       auth: { token: jwt },
       transports: ['websocket'],
@@ -118,26 +151,32 @@ describe('Tickets (e2e)', () => {
 
     await new Promise<void>((resolve, reject) => {
       client.on('connect', () => resolve());
-      client.on('connect_error', (err) => reject(err));
+      client.on('connect_error', (err: unknown) =>
+        reject(new Error(String(err))),
+      );
     });
 
     // join
-    const joinRes = await new Promise<any>((resolve) =>
-      client.emit('join_ticket', { tick_id: t.tick_id }, (r: any) =>
+    const joinRes = await new Promise<unknown>((resolve) =>
+      client.emit('join_ticket', { tick_id: t.tick_id }, (r: unknown) =>
         resolve(r),
       ),
     );
     expect(joinRes).toBeTruthy();
 
     // send
-    const sendRes = await new Promise<any>((resolve) =>
+    const sendRes = await new Promise<unknown>((resolve) =>
       client.emit(
         'message',
         { tick_id: t.tick_id, message: 'hola ws' },
-        (r: any) => resolve(r),
+        (r: unknown) => resolve(r),
       ),
     );
-    expect(sendRes?.status).toBe('ok');
+    const sendStatus =
+      sendRes && typeof sendRes === 'object'
+        ? (sendRes as Record<string, unknown>)['status']
+        : undefined;
+    expect(sendStatus).toBe('ok');
 
     // give server a moment to persist
     await new Promise((r) => setTimeout(r, 200));
@@ -156,7 +195,9 @@ describe('Tickets (e2e)', () => {
     expect(identifier).toBeTruthy();
 
     // create a ticket (by regular user)
-    const resCreate = await request(app.getHttpServer())
+    const resCreate = await request(
+      app.getHttpServer() as unknown as HttpServer,
+    )
       .post('/tickets')
       .set('Authorization', `Bearer ${jwt}`)
       .field('tiid_id', identifier!.tiid_id)
@@ -164,10 +205,22 @@ describe('Tickets (e2e)', () => {
       .field('tick_descripcion', 'Descripcion')
       .field('tick_modulo', 'Soporte');
     expect(resCreate.status).toBe(201);
-    const tick_id = resCreate.body.tick_id;
+    const tick_id = ((): unknown => {
+      const b: unknown = resCreate.body;
+      if (
+        typeof b === 'object' &&
+        b !== null &&
+        'tick_id' in (b as Record<string, unknown>)
+      ) {
+        return (b as Record<string, unknown>)['tick_id'];
+      }
+      return undefined;
+    })();
 
     // admin tries to assign the ticket to the regular user (which is not admin)
-    const resAssign = await request(app.getHttpServer())
+    const resAssign = await request(
+      app.getHttpServer() as unknown as HttpServer,
+    )
       .post('/tickets/assign')
       .set('Authorization', `Bearer ${adminJwt}`)
       .send({ ticket_id: tick_id, tick_usuario_asignado: usua_cedula });
@@ -187,7 +240,7 @@ describe('Tickets (e2e)', () => {
       },
     });
 
-    const resClose = await request(app.getHttpServer())
+    const resClose = await request(app.getHttpServer() as unknown as HttpServer)
       .post(`/tickets/${t.tick_id}/close`)
       .set('Authorization', `Bearer ${adminJwt}`)
       .send({ note: 'cerrando' });

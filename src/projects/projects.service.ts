@@ -69,9 +69,9 @@ export class TicketProyectosService {
     return this.prisma.ticket_proyectos.delete({ where: { tipr_id } });
   }
 
-  // return list of users assigned to a project (full user records)
+  // Devuelve la lista de usuarios asignados a un proyecto (registros completos)
   async getUsersForProject(tipr_id: number) {
-    // only consider active assignments (tipr_estado = 'A') and return active admin users
+    // Considerar sólo asignaciones activas (tipr_estado = 'A') y devolver usuarios admin activos
     const rows = await this.prisma.ticket_proyecto_usuario.findMany({
       where: { tipr_id, tipr_estado: 'A' },
     });
@@ -82,9 +82,9 @@ export class TicketProyectosService {
     });
   }
 
-  // set users for project: keep only users that exist and have perf_id = 2
+  // Establece usuarios para un proyecto: conservar sólo usuarios existentes con perf_id = 2
   async setUsersForProject(tipr_id: number, usua_cedulas: string[]) {
-    // find valid users (existing users with perf_id = 2 and active)
+    // Buscar usuarios válidos (existentes, con perf_id = 2 y activos)
     const valid = await this.prisma.ticket_usuarios.findMany({
       where: {
         usua_cedula: { in: usua_cedulas },
@@ -94,7 +94,7 @@ export class TicketProyectosService {
     });
     const validCedulas = valid.map((u) => u.usua_cedula);
 
-    // fetch existing assignments for the project
+    // Obtener las asignaciones actuales para el proyecto
     const existing = await this.prisma.ticket_proyecto_usuario.findMany({
       where: { tipr_id },
     });
@@ -102,27 +102,27 @@ export class TicketProyectosService {
       .map((r) => r.usua_cedula)
       .filter(Boolean) as string[];
 
-    // compute which cedulas are new and which should be deactivated
+    // Calcular qué cédulas son nuevas y cuáles deben desactivarse
     const toCreate = validCedulas.filter((c) => !existingCedulas.includes(c));
     const toActivate = validCedulas.filter((c) => existingCedulas.includes(c));
-    // cedulas currently assigned but not in the new list should be marked as Inactive ('I')
+    // Las cédulas actualmente asignadas que no estén en la nueva lista deben marcarse como Inactivas ('I')
     const toDeactivate = existingCedulas.filter(
       (c) => !validCedulas.includes(c),
     );
 
-    // perform transaction: activate/update existing, deactivate removed, and create new rows
+    // Ejecutar transacción: activar/actualizar existentes, desactivar los eliminados y crear nuevas filas
     await this.prisma.$transaction([
-      // activate/update existing assignments
+      // activar/actualizar asignaciones existentes
       this.prisma.ticket_proyecto_usuario.updateMany({
         where: { tipr_id, usua_cedula: { in: toActivate } },
         data: { tipr_estado: 'A', fecha_sistema: new Date() },
       }),
-      // deactivate assignments that were removed
+      // desactivar asignaciones que fueron removidas
       this.prisma.ticket_proyecto_usuario.updateMany({
         where: { tipr_id, usua_cedula: { in: toDeactivate } },
         data: { tipr_estado: 'I' },
       }),
-      // create new assignments
+      // crear nuevas asignaciones
       this.prisma.ticket_proyecto_usuario.createMany({
         data: toCreate.map((c) => ({
           tipr_id,

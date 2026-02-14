@@ -9,8 +9,11 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
-  // keep a tiny in-memory fallback for legacy test users
-  // Note: perf_id: 1 => regular user, 2 => admin
+  // Servicio de autenticación.
+  // Seguridad:
+  // - Nunca registrar contraseñas ni tokens en texto plano.
+  // - El fallback en memoria existe sólo para pruebas y no debe usarse en producción.
+  // Nota: perf_id: 1 => usuario normal, 2 => administrador
   private users = [
     {
       usua_cedula: '00000000001',
@@ -42,7 +45,7 @@ export class AuthService {
     password: string,
     perf_id: number = 1,
   ) {
-    // Ensure caller provided a cédula and it doesn't exist already
+    // Asegurar que el invocador proporcionó una cédula y que no exista ya
     if (!usua_cedula) throw new BadRequestException('usua_cedula es requerido');
     const exists = await this.prisma.ticket_usuarios.findUnique({
       where: { usua_cedula },
@@ -77,17 +80,18 @@ export class AuthService {
   }
 
   /**
-   * Login: first try DB users (by email or name), else fallback to in-memory users (useful for tests).
+   * Login: primero intentar con usuarios en BD (por cédula), si no existe usar el fallback
+   * en memoria (útil para pruebas).
    */
   async login(usua_cedula: string, password: string) {
-    // try DB lookup by cédula
+    // intentar búsqueda en la BD por cédula
     const user = await this.prisma.ticket_usuarios.findUnique({
       where: { usua_cedula },
     });
     if (user) {
-      // only allow login if usua_login flag is explicitly 'Si'
+      // permitir login sólo si la bandera usua_login es explícitamente 'Si'
       if (String(user.usua_login).toLowerCase() !== 'si') {
-        // give a generic unauthorized to avoid leaking info
+        // devolver un error genérico de no autorizado para evitar filtrar información
         throw new UnauthorizedException(
           'Credenciales inválidas o usuario no habilitado para login',
         );
@@ -103,7 +107,7 @@ export class AuthService {
       return { access_token: token };
     }
 
-    // fallback to in-memory users by cedula
+    // alternativa: usar usuarios en memoria por cédula
     const mem = this.users.find((u) => u.usua_cedula === usua_cedula);
     if (!mem || !(await bcrypt.compare(password, mem.usua_password))) {
       throw new UnauthorizedException('Credenciales inválidas');
