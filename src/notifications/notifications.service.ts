@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 @Injectable()
 export class NotificationsService {
   // Servicio de notificaciones: persistencia y emisión en tiempo real.
-  // Seguridad / auditoría:
+  // Seguridad :
   // - No se incluyen datos sensibles en los payloads emitidos por sockets.
   // - Si la emisión en tiempo real falla, la creación en BD no debe revertirse.
   constructor(
@@ -88,9 +88,16 @@ export class NotificationsService {
         orderBy: { fecha_sistema: 'desc' },
       }),
     ]);
+    const totalPages = Math.ceil(total / pp);
+    const from = total === 0 ? 0 : (p - 1) * pp + 1;
+    const to = total === 0 ? 0 : Math.min(p * pp, total);
+
+    const range =
+      total === 0 ? `Mostrando 0 de 0` : `Mostrando del ${from} al ${to} de ${total}`;
+
     return {
       data,
-      meta: { total, page: p, perPage: pp, totalPages: Math.ceil(total / pp) },
+      meta: { total, page: p, perPage: pp, totalPages, from, to, range },
     };
   }
 

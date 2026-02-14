@@ -13,7 +13,7 @@ import { TicketPrioridadesService } from './priorities.service';
 import { CreatePrioridadDto } from './dto/create-prioridad.dto';
 import { UpdatePrioridadDto } from './dto/update-prioridad.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @Controller('prioridades')
 @ApiTags('prioridades')
@@ -23,6 +23,20 @@ export class TicketPrioridadesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get()
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'perPage', required: false })
+  @ApiQuery({ name: 'q', required: false, description: 'Texto a buscar' })
+  @ApiOperation({ summary: 'Listar prioridades', description: 'Devuelve listado de prioridades. Soporta paginación con `page` y `perPage`.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de prioridades (posible paginado)',
+    schema: {
+      example: {
+        data: [{ prio_id: 1, prio_nombre: 'Alta' }],
+        meta: { total: 5, page: 1, perPage: 10, totalPages: 1, from: 1, to: 5, range: 'Mostrando del 1 al 5 de 5' },
+      },
+    },
+  })
   findAll(@Query() query: unknown) {
     const qObj = (query as Record<string, unknown>) ?? {};
     const hasPage =

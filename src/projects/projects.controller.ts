@@ -16,7 +16,7 @@ import { TicketProyectosService } from './projects.service';
 import { CreateProyectoDto } from './dto/create-proyecto.dto';
 import { UpdateProyectoDto } from './dto/update-proyecto.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 
 @Controller('proyectos')
 @ApiTags('proyectos')
@@ -26,6 +26,21 @@ export class TicketProyectosController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get()
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'perPage', required: false })
+  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Alias para q' })
+  @ApiOperation({ summary: 'Listar proyectos', description: 'Devuelve listado de proyectos. Soporta paginación con `page` y `perPage`.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de proyectos (posible paginado)',
+    schema: {
+      example: {
+        data: [{ tipr_id: 1, tipr_nombre: 'Proyecto A' }],
+        meta: { total: 100, page: 2, perPage: 10, totalPages: 10, from: 11, to: 20, range: 'Mostrando del 11 al 20 de 100' },
+      },
+    },
+  })
   findAll(
     @Request() req: ExRequest & { user?: { project_token?: boolean } },
     @Query()

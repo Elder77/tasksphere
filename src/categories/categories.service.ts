@@ -37,9 +37,13 @@ export class TicketCategoriasService {
         orderBy: { fecha_sistema: 'desc' },
       }),
     ]);
+    const totalPages = Math.ceil(total / pp);
+    const from = total === 0 ? 0 : (p - 1) * pp + 1;
+    const to = total === 0 ? 0 : Math.min(p * pp, total);
+    const range = total === 0 ? `Mostrando 0 de 0` : `Mostrando del ${from} al ${to} de ${total}`;
     return {
       data,
-      meta: { total, page: p, perPage: pp, totalPages: Math.ceil(total / pp) },
+      meta: { total, page: p, perPage: pp, totalPages, from, to, range },
     };
   }
 

@@ -11,7 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -26,6 +26,30 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
+  @ApiQuery({ name: 'page', required: false, description: 'Número de página (1-based)' })
+  @ApiQuery({ name: 'perPage', required: false, description: 'Elementos por página' })
+  @ApiQuery({ name: 'perf_id', required: false, description: 'Filtro por perfil (id)' })
+  @ApiQuery({ name: 'usua_estado', required: false, description: 'Filtro por estado de usuario' })
+  @ApiQuery({ name: 'all', required: false, description: 'Si true devuelve todos sin paginar' })
+  @ApiOperation({ summary: 'Listar usuarios', description: 'Devuelve listado de usuarios. Soporta paginación con `page` y `perPage`.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de usuarios (con meta de paginación)',
+    schema: {
+      example: {
+        data: [{ usua_cedula: '01020304050', usua_nombres: 'Juan' }],
+        meta: {
+          total: 100,
+          page: 2,
+          perPage: 10,
+          totalPages: 10,
+          from: 11,
+          to: 20,
+          range: 'Mostrando del 11 al 20 de 100',
+        },
+      },
+    },
+  })
   async getAll(
     @Query()
     query: {

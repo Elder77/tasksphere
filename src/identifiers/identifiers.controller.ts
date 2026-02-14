@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 // ...existing imports consolidated above
 import { UpdateIdentifierDto } from './dto/update-identifier.dto';
@@ -69,15 +70,21 @@ export class IdentifiersController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Get()
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'perPage', required: false })
+  @ApiQuery({ name: 'q', required: false })
   @ApiOperation({
     summary: 'Listar identificadores',
     description: 'Devuelve todos los identificadores disponibles.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Listado de identificadores',
+    description: 'Listado de identificadores (posible paginado)',
     schema: {
-      example: [{ tiid_id: 1, tiid_nombre: 'Placa', tiid_tipo_dato: 'string' }],
+      example: {
+        data: [{ tiid_id: 1, tiid_nombre: 'Placa', tiid_tipo_dato: 'string' }],
+        meta: { total: 42, page: 1, perPage: 10, totalPages: 5, from: 1, to: 10, range: 'Mostrando del 1 al 10 de 42' },
+      },
     },
   })
   findAll(@Query() query: { page?: string; perPage?: string; q?: string }) {

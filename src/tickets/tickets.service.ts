@@ -217,9 +217,18 @@ export class TicketsService {
       }),
     ]);
 
+    const totalPages = Math.ceil(total / perPage);
+    const from = total === 0 ? 0 : (page - 1) * perPage + 1;
+    const to = total === 0 ? 0 : Math.min(page * perPage, total);
+
+    const range =
+      total === 0
+        ? `Mostrando 0 de 0`
+        : `Mostrando del ${from} al ${to} de ${total}`;
+
     return {
       data,
-      meta: { total, page, perPage, totalPages: Math.ceil(total / perPage) },
+      meta: { total, page, perPage, totalPages, from, to, range },
     };
   }
 
